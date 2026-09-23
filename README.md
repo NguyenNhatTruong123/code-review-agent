@@ -1,61 +1,55 @@
 # AI Code Review Agent
 
-An early-stage code review assistant project. The current repository contains the application scaffold for a React web client, a Spring Boot API, and a Java module reserved for AI review functionality. Repository analysis, rule management, and live AI review are not implemented yet.
+A Java and React application for reviewing public GitHub repositories or pasted source code against user-selected coding rules. Reviews are tied to a Git commit and a snapshot of the rules used, so later rule changes do not alter prior results.
+
+The application includes deterministic literal-match rules that work without an AI key. Rules without a literal match use the OpenAI review adapter when configured. Each new account receives a starter rule set containing Java `System.out`, JavaScript `console.log`, and `TODO` checks.
 
 ## Project Structure
 
 | Path | Purpose |
 |---|---|
-| `code-review-web/` | React and Vite web frontend, served locally on port `8000`. |
-| `code-review-api/` | Spring Boot REST API, served locally on port `8080`. |
-| `code-review-ai/` | Java module for future code analysis and AI integration. |
-| `.docs/` | Product and engineering requirements used to guide implementation and verify generated or hand-written code. |
-| `usage-prompts/` | Archive of prompts that have been used for this project, so they can be reviewed and reused. |
+| `code-review-web/` | React and Vite frontend. |
+| `code-review-api/` | Spring Boot API, session authentication, GitHub retrieval, persistence, and review orchestration. |
+| `code-review-ai/` | Deterministic rule matching and optional AI provider adapter. |
+| `.docs/` | Requirements used to implement and verify code. |
+| `usage-prompts/` | Archive of prompts previously used for this project. |
+| `AI_Code_Review_Agent_BRD_SRS.md` | Business and software requirements. |
 
-### Engineering Documents
-
-The `.docs/` folder contains:
-
-- [`api-spec.md`](.docs/api-spec.md): API design, validation, authorization, response, error, and asynchronous processing requirements.
-- [`coding-rules.md`](.docs/coding-rules.md): General coding conventions and module-specific implementation rules.
-- [`security-rules.md`](.docs/security-rules.md): Security requirements for authentication, GitHub repository access, source code handling, AI inputs, and data protection.
-
-Read the relevant documents before implementing or reviewing code. Keep them aligned with the product requirements and the actual project structure.
-
-### Prompt Archive
-
-Store prompts used to generate, modify, or review project artifacts in `usage-prompts/`. Keep each prompt as a readable text or Markdown file with a descriptive filename. This folder is an archive for traceability and reuse; it is not runtime application configuration.
+Read `.docs/api-spec.md`, `.docs/coding-rules.md`, and `.docs/security-rules.md` before changing implementation.
 
 ## Prerequisites
 
 - Java 17
 - Maven 3.9 or later
-- Node.js 18 or later and npm
+- Node.js 22 or later and npm
+- Internet access from the API process to GitHub for repository reviews
 
-## Build the Java Modules
+## Configuration
 
-From the repository root:
+The API runs on port `8080` and uses a local H2 file database (`./code-review-data`) by default. It creates the database on first start. Set environment variables as needed:
+
+| Variable | Purpose |
+|---|---|
+| `OPENAI_API_KEY` | Enables semantic rules. Omit it for deterministic rules only. |
+| `OPENAI_MODEL` | AI model name; defaults to `gpt-4o-mini`. |
+| `GITHUB_TOKEN` | Optional token for higher GitHub API rate limits. Only public repositories are accepted. |
+| `DB_URL`, `DB_USER`, `DB_PASSWORD` | Override the H2 connection. |
+| `SESSION_COOKIE_SECURE` | Set to `true` when serving through HTTPS in a deployed environment. |
+
+Input limits are set in `code-review-api/src/main/resources/application.yml`. The API processes at most 300 supported source files, 200 KB per file, and 5 MB of source content by default. Oversized repositories fail with a visible error rather than producing an incomplete clean report.
+
+Source code submitted for semantic review is sent to the configured AI provider. Do not enable semantic rules for code that your organization prohibits sending to that provider.
+
+## Run Locally
+
+In the repository root, package the Java modules and start the API:
 
 ```bash
-mvn clean verify
+mvn -pl code-review-api -am package -DskipTests
+java -jar code-review-api/target/code-review-api-0.0.1-SNAPSHOT.jar
 ```
 
-## Run the API
-
-From the repository root:
-
-```bash
-mvn -pl code-review-api -am spring-boot:run
-```
-
-The API listens on `http://localhost:8080` by default. Available scaffold endpoints:
-
-- `GET http://localhost:8080/api/health`
-- `GET http://localhost:8080/api/greeting`
-
-## Run the Web Frontend
-
-In a separate terminal:
+In a second terminal, start the frontend:
 
 ```bash
 cd code-review-web
@@ -63,8 +57,47 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:8000`. The Vite development proxy forwards `/api` requests to the API at `http://localhost:8080`.
+Open `http://localhost:8000`. Register an account with a password of at least 12 characters, then sign in. The frontend uses the Vite proxy to reach the API at `http://localhost:8080`.
 
-## Current Limitations
+To review a public repository, enter a URL such as `https://github.com/owner/repo`, optionally select a branch or commit, choose a rule set, and start the review. The API resolves the ref to an immutable commit SHA before downloading the archive. Reviews run in the background; the detail page refreshes while processing. For pasted code, select the language explicitly or use a recognized file extension.
 
-The current scaffold does not yet provide repository analysis, code paste review, rule or rule-set management, authentication, database-backed history, file upload, or a live AI provider integration. The `code-review-ai` module is currently a placeholder and does not require an AI API key.
+## API Overview
+
+All application endpoints except registration, login, CSRF initialization, and health require an authenticated session. Mutating requests require the CSRF token returned by `GET /api/v1/auth/csrf` in the `X-XSRF-TOKEN` header.
+
+| Route | Purpose |
+|---|---|
+| `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me` | Account and session. |
+| `GET /api/v1/github/inspect?url=...` | Validate a public repository and list up to 100 branch names. |
+| `POST /api/v1/reviews/repository`, `POST /api/v1/reviews/paste` | Start a review; return `202` and a review ID. |
+| `GET /api/v1/reviews?page=0&size=50`, `GET /api/v1/reviews/{id}` | Paginated history and review details. |
+| `GET /api/v1/reviews/{id}/findings` | Paginated findings with severity, rule, and file filters. |
+| `POST /api/v1/reviews/{id}/cancel` | Cancel a queued or running review. |
+| `POST /api/v1/reviews/{id}/findings/{findingId}/feedback` | Mark a finding helpful, irrelevant, or a false positive. |
+| `GET/POST/PUT/DELETE /api/v1/rules` and `/api/v1/rule-sets` | Manage personal rules and rule sets. |
+
+The client can send an optional `Idempotency-Key` header when creating a review to prevent duplicate submissions. A key reused with different input returns a conflict.
+
+## Tests and Coverage
+
+The repository includes unit tests for rule matching, repository archive filtering, rule snapshots, review orchestration, and API ownership behavior. JaCoCo creates coverage reports at `code-review-ai/target/site/jacoco/index.html` and `code-review-api/target/site/jacoco/index.html` when Maven verification is run:
+
+```bash
+mvn clean verify
+```
+
+The frontend build command is:
+
+```bash
+cd code-review-web
+npm run build
+```
+
+Frontend unit tests and a V8 coverage report can be run with `npm run coverage` from `code-review-web/`.
+Maven and Vitest are configured to fail verification when instruction/statement coverage is below 80% in their respective modules.
+
+These commands are provided for local verification. They were not run as part of the code generation request.
+
+## Current Scope
+
+The application accepts public `github.com` repositories and a defined set of text source file extensions. It does not review private repositories, pull requests, dependencies, or runtime behavior, and it never executes downloaded code. Processing limits and GitHub API rate limits can prevent very large repositories from being reviewed with default settings.

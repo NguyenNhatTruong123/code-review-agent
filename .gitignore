@@ -5,6 +5,7 @@ dist/
 .vscode/
 *.iml
 .env
+code-review-data.*
 
 */.settings/*
 .settings
