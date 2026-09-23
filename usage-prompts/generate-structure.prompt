@@ -1,0 +1,104 @@
+Bạn là Senior Java/JavaScript Developer. Hãy tạo cấu trúc ban đầu cho dự án “Coding Review with AI” trong workspace hiện tại.
+
+Mục tiêu của giai đoạn này là tạo các thư mục, file cấu hình và mã tối thiểu để backend và frontend khởi động được. Frontend phải gọi API của backend để lấy câu chào rồi hiển thị. Chưa triển khai chức năng review code hoặc gọi AI thật.
+
+1. CẤU TRÚC THƯ MỤC
+
+Tạo một thư mục cha tên code-review-agent. Bên trong có ba thư mục con chính:
+
+code-review-agent/
+  code-review-ai/
+  code-review-api/
+  code-review-web/
+
+Vai trò của từng thư mục:
+
+- code-review-ai: Module Java dành cho phần tích hợp AI sau này. Tạo cấu trúc service và thư mục resources/prompts chứa một file prompt mẫu. Hiện tại không gọi API AI.
+- code-review-api: Backend chính của ứng dụng, dùng Java 17, Spring Boot 3.x và Maven. Chứa REST API và là nơi xử lý nghiệp vụ sau này.
+- code-review-web: Frontend dùng ReactJS và Vite. Ở giai đoạn này chỉ hiển thị câu chào lấy từ backend.
+
+2. CẤU TRÚC BUILD
+
+Dùng Maven multi-module cho phần Java:
+
+- code-review-agent/pom.xml là parent/aggregator POM.
+- code-review-ai và code-review-api là hai Maven module.
+- code-review-api phụ thuộc vào code-review-ai.
+- Dùng package Java nhất quán, ví dụ com.codereviewagent.
+
+Frontend code-review-web là dự án ReactJS/Vite riêng, dùng npm. Không đưa frontend thành Maven module.
+
+3. CÁC FILE CẦN TẠO
+
+Tại code-review-agent:
+- pom.xml
+- README.md
+- .gitignore
+
+Trong code-review-ai:
+- pom.xml
+- README.md
+- src/main/java/com/codereviewagent/ai/service/AiReviewService.java
+- src/main/resources/prompts/code-review-system-prompt.md
+
+AiReviewService.java chỉ là class placeholder, có comment ngắn giải thích rằng service này sẽ tích hợp AI sau này. File prompt chỉ cần nội dung mẫu ngắn. Không thêm thư viện AI, API key hoặc mã gọi AI thật.
+
+Trong code-review-api:
+- pom.xml
+- README.md
+- src/main/java/com/codereviewagent/api/CodeReviewApiApplication.java
+- src/main/java/com/codereviewagent/api/controller/HealthController.java
+- src/main/java/com/codereviewagent/api/controller/GreetingController.java
+- src/main/resources/application.yml
+
+Có thể tạo các package service và config nếu cần, nhưng không cần tạo class rỗng chỉ để giữ thư mục.
+
+Trong code-review-web:
+- package.json
+- vite.config.js
+- index.html
+- README.md
+- src/main.jsx
+- src/App.jsx
+- src/index.css
+
+Chỉ thêm file khác khi thật sự cần để ứng dụng build và chạy.
+
+4. BACKEND
+
+Backend Spring Boot phải chạy ở http://localhost:8080. Cấu hình server.port bằng 8080 trong application.yml. Mọi REST API dùng tiền tố /api.
+
+Tạo hai endpoint:
+
+GET /api/health
+Trả về HTTP 200 và JSON: {"status":"UP"}
+
+GET /api/greeting
+Trả về HTTP 200 và JSON: {"message":"Hello World!! I am an agent to review your code!"}
+
+Câu chào chính thức phải được khai báo ở backend. Backend chưa cần phục vụ file frontend.
+
+5. FRONTEND VÀ CÁCH GỌI API
+
+Frontend Vite phải chạy ở http://localhost:8000. Cấu hình cổng 8000 trong vite.config.js. Cấu hình Vite proxy để request bắt đầu bằng /api được chuyển tới http://localhost:8080.
+
+Khi người dùng mở http://localhost:8000, React phải tự động gọi GET /api/greeting bằng fetch, đọc trường message trong JSON response và hiển thị nội dung nhận được.
+
+Tuyệt đối không hard-code câu “Hello World!! I am an agent to review your code!” trong source code frontend và không dùng câu đó làm fallback. Câu chào trên màn hình phải đến từ response của backend.
+
+Trong khi chờ API, hiển thị: Loading greeting...
+
+Nếu API thất bại hoặc backend không chạy, hiển thị: Unable to load greeting. Please try again.
+
+Giao diện chỉ cần đơn giản, dễ đọc, dùng CSS cơ bản. Không cần thư viện UI hoặc Axios.
+
+6. GIỚI HẠN PHẠM VI
+
+Không tạo chức năng review code, upload file, đăng nhập, database, Docker, Redis, message queue, lưu lịch sử, gọi AI thật hoặc quản lý API key ở giai đoạn này. Không hard-code secret. Không tạo nhiều class placeholder không cần thiết.
+
+README.md ở thư mục gốc phải ghi rõ điều kiện cần (Java 17, Maven, Node.js, npm), lệnh build và chạy backend, lệnh cài dependency và chạy frontend, cùng các URL để kiểm tra.
+
+.gitignore phải bỏ qua tối thiểu target/, node_modules/, dist/, .idea/, .vscode/, *.iml và .env.
+
+
+Nếu môi trường không cho phép cài dependency hoặc chạy ứng dụng, hãy nói rõ bước nào chưa kiểm chứng; không khẳng định đã chạy thành công khi chưa kiểm tra.
