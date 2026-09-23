@@ -1,0 +1,3 @@
+Task: Hãy tạo folder .docs cùng cấp với các package, trong đó có các file api-spec.md (mô tả yêu cầu khi viết API), coding-rules.md (mô tả rules khi viết code cần phải tuân theo), security-rules.md (mô tả các rules về bảo mật khi thực hiện coding).
+Yêu cầu hãy sử dụng những kiến thức chung để tạo content cho các file này.
+Done: Sau khi thực hiện xong, các file có nội dung rõ ràng, clean, dễ hiểu, AI có thể đọc qua rồi dễ dàng áp dụng nếu có yêu cầu.
