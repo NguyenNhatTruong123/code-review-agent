@@ -5,3 +5,9 @@ dist/
 .vscode/
 *.iml
 .env
+
+*/.settings/*
+.settings
+.project
+.classpath
+package-lock.json
