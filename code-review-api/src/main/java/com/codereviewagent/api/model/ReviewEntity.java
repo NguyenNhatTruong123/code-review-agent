@@ -3,6 +3,7 @@ package com.codereviewagent.api.model;
 import jakarta.persistence.*;
 import java.time.Instant;
 
+/** Review aggregate, including its immutable input identity and rule snapshot metadata. */
 @Entity
 @Table(name = "reviews", uniqueConstraints = @UniqueConstraint(columnNames = {"owner_id", "idempotency_key"}))
 public class ReviewEntity {
@@ -27,6 +28,12 @@ public class ReviewEntity {
     public Instant createdAt;
     public Instant updatedAt;
     protected ReviewEntity() {}
+    /** Creates a queued review with its owner and selected rule set.
+     * @param id review identifier
+     * @param ownerId owning application user ID
+     * @param inputType repository or paste input type
+     * @param ruleSetId selected rule-set identifier
+     */
     public ReviewEntity(String id, String ownerId, String inputType, String ruleSetId) {
         this.id = id; this.ownerId = ownerId; this.inputType = inputType;
         this.ruleSetId = ruleSetId; this.status = "QUEUED";

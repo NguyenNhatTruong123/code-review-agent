@@ -82,12 +82,12 @@ Tài liệu này là chuẩn chung cho code mới và code được sửa trong 
 ## 8. Quy tắc viết comment và Javadoc
 
 - Comment phải giải thích mục đích, lý do hoặc invariant khó suy ra từ code; không mô tả lại từng dòng code.
-- Class, interface, record, public method và public API quan trọng phải có Javadoc ngắn gọn, nêu trách nhiệm, input/output và exception quan trọng khi phù hợp.
+- BẮT BUỘC: class, interface, record, public constructor, public method và public API phải có Javadoc dạng block `/** ... */`. Với method/constructor/record có tham số, phải có `@param` giải thích từng tham số; method có kết quả phải có `@return`; method có exception quan trọng hoặc khai báo `throws` phải có `@throws`. Không được coi audit là đạt nếu chỉ có một câu mô tả hoặc còn thiếu tag cần thiết.
 - Method private chỉ cần comment khi có logic không hiển nhiên, workaround, thứ tự xử lý bắt buộc hoặc ràng buộc từ hệ thống bên ngoài.
 - Comment phải được cập nhật hoặc xóa khi behavior/code thay đổi; không để comment sai, lỗi thời hoặc mâu thuẫn với implementation.
 - Không dùng comment để che code chết, code bị vô hiệu hóa, TODO không có context hoặc workaround không có lý do.
 - Comment về security, transaction, retry, timeout, concurrency, cache, consistency hoặc external API phải ghi rõ ràng lý do và ràng buộc liên quan.
 - Javadoc không được hứa hẹn behavior mà implementation không đảm bảo; không đưa secret, token, prompt nội bộ hoặc dữ liệu nhạy cảm vào comment.
-- Giữ comment ngắn, cụ thể, đúng ngôn ngữ và format của file; ưu tiên Javadoc cho public Java API và comment định hướng cho block logic phức tạp.
+- Giữ comment ngắn, cụ thể, đúng ngôn ngữ và format của file; Javadoc public Java phải mô tả trách nhiệm và contract bằng `@param`, `@return`, `@throws` khi áp dụng, còn comment inline chỉ định hướng cho block logic phức tạp.
 - Khi chỉ thêm comment, không được thay đổi business logic, public API, format không liên quan hoặc thứ tự xử lý.
 

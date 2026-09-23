@@ -27,13 +27,36 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+/** Loads public GitHub metadata and bounded source archives for a pinned commit. */
 @Service
 public class GitHubService {
+    /** Parsed repository identity accepted by the GitHub API.
+     * @param owner GitHub owner or organization name
+     * @param name repository name without an optional {@code .git} suffix
+     */
     public record Repo(String owner, String name) {
+        /** Returns the canonical HTTPS repository URL.
+         * @return canonical repository URL
+         */
         public String url() { return "https://github.com/" + owner + "/" + name; }
     }
+    /** Repository metadata used to choose a branch before review creation.
+     * @param repositoryUrl canonical repository URL
+     * @param defaultBranch repository default branch
+     * @param branches available branch names
+     */
     public record RepoInfo(String repositoryUrl, String defaultBranch, List<String> branches) {}
+    /** Source file with a normalized language identifier.
+     * @param path repository-relative source path
+     * @param language normalized language identifier
+     * @param code UTF-8 source text
+     */
     public record SourceFile(String path, String language, String code) {}
+    /** Archive result including files deliberately skipped by safety or size limits.
+     * @param files accepted source files
+     * @param skippedFiles count of excluded or invalid files
+     * @param warnings bounded warning messages for skipped content
+     */
     public record SourceArchive(List<SourceFile> files, int skippedFiles, List<String> warnings) {}
 
     private static final Set<String> SKIP_DIRS = Set.of("node_modules", "vendor", "dist", "build", "target", ".git", "coverage", "generated", ".next", "out");
@@ -45,6 +68,14 @@ public class GitHubService {
     private final int maxFileBytes;
     private final long maxTotalSourceBytes;
 
+    /** Creates a GitHub client with configured archive and source-size limits.
+     * @param mapper JSON parser for GitHub responses
+     * @param token optional GitHub API credential
+     * @param maxArchiveBytes compressed archive limit
+     * @param maxFiles maximum accepted source file count
+     * @param maxFileBytes maximum accepted file size
+     * @param maxTotalSourceBytes maximum accepted decompressed source size
+     */
     @Autowired
     public GitHubService(ObjectMapper mapper, @Value("${app.github-token:}") String token,
                          @Value("${app.max-archive-bytes}") long maxArchiveBytes,
@@ -63,6 +94,11 @@ public class GitHubService {
         this.client = client;
     }
 
+    /** Validates and parses an HTTPS public GitHub repository URL.
+     * @param url user-supplied repository URL
+     * @return parsed repository owner and name
+     * @throws ResponseStatusException with HTTP 400 when the URL is not an allowed repository URL
+     */
     public Repo parse(String url) {
         try {
             URI uri = URI.create(url);
@@ -80,6 +116,11 @@ public class GitHubService {
         }
     }
 
+    /** Retrieves public repository metadata and available branches.
+     * @param repo parsed repository identity
+     * @return default branch and available branches
+     * @throws ResponseStatusException when GitHub rejects, cannot find, or rate-limits the request
+     */
     public RepoInfo inspect(Repo repo) {
         JsonNode details = getJson("https://api.github.com/repos/" + repo.owner() + "/" + repo.name());
         if (details.path("private").asBoolean(true)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Repository is not public");
@@ -91,6 +132,12 @@ public class GitHubService {
         return new RepoInfo(repo.url(), defaultBranch, branches);
     }
 
+    /** Resolves a branch or commit reference to a 40-character commit SHA.
+     * @param repo parsed repository identity
+     * @param ref branch or commit reference
+     * @return immutable 40-character commit SHA
+     * @throws ResponseStatusException when the ref is invalid or GitHub returns an invalid response
+     */
     public String resolveCommit(Repo repo, String ref) {
         if (ref == null || ref.isBlank() || ref.length() > 200 || !ref.matches("[A-Za-z0-9._/-]+")
                 || ref.startsWith("/") || ref.contains("..")) {
@@ -103,6 +150,13 @@ public class GitHubService {
         return sha;
     }
 
+    /** Downloads and bounds a commit archive, rejecting unsafe redirects and files.
+     * @param repo parsed repository identity
+     * @param sha immutable 40-character commit SHA
+     * @return accepted source files and skip warnings
+     * @throws IOException when the archive is invalid, too large, unsafe, or unreadable
+     * @throws InterruptedException when the archive request is interrupted
+     */
     public SourceArchive archive(Repo repo, String sha) throws IOException, InterruptedException {
         if (!sha.matches("[a-fA-F0-9]{40}")) throw new IllegalArgumentException("Invalid commit SHA");
         URI uri = URI.create("https://api.github.com/repos/" + repo.owner() + "/" + repo.name() + "/zipball/" + sha);
@@ -123,6 +177,7 @@ public class GitHubService {
     }
 
     SourceArchive readArchive(ZipInputStream zip) throws IOException {
+        // Read every entry to keep the archive stream aligned, but retain only reviewable source files.
         List<SourceFile> files = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         int skipped = 0;
@@ -191,6 +246,10 @@ public class GitHubService {
             builder.header("Authorization", "Bearer " + token);
         return builder;
     }
+    /** Maps a supported source filename extension to the API language identifier.
+     * @param path source filename or path
+     * @return normalized language identifier, or {@code null} when unsupported
+     */
     public static String language(String path) {
         String lower = path.toLowerCase(java.util.Locale.ROOT);
         if (lower.endsWith(".java")) return "JAVA";

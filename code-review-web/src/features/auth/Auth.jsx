@@ -12,6 +12,7 @@ export default function Auth({ onLogin }) {
   async function submit(event) {
     event.preventDefault(); setBusy(true); setError('');
     try {
+      // Registration intentionally continues into login so the new account gets a session immediately.
       if (mode === 'register') await api('/auth/register', { method: 'POST', body: { username, password } });
       await api('/auth/login', { method: 'POST', body: { username, password } });
       onLogin(await api('/auth/me'));

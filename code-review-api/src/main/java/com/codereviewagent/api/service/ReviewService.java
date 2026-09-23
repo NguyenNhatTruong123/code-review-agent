@@ -26,19 +26,77 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+/** Coordinates review submission, ownership checks, pagination, and result projection. */
 @Service
 public class ReviewService {
+    /** Input contract for a repository review; the ref is resolved to a commit before processing.
+     * @param repositoryUrl public repository URL
+     * @param ref requested branch or commit; blank selects the default branch
+     * @param ruleSetId owner-scoped rule-set identifier
+     */
     public record RepositoryInput(String repositoryUrl, String ref, String ruleSetId) {}
+    /** Input contract for a review of one pasted source file.
+     * @param code source text
+     * @param fileName logical source filename
+     * @param language explicit language or blank for filename detection
+     * @param ruleSetId owner-scoped rule-set identifier
+     */
     public record PasteInput(String code, String fileName, String language, String ruleSetId) {}
+    /** Public review status view returned by the API.
+     * @param id review identifier
+     * @param inputType repository or paste input type
+     * @param repositoryUrl canonical repository URL when applicable
+     * @param requestedRef requested repository ref when applicable
+     * @param commitSha resolved immutable commit when applicable
+     * @param fileName pasted filename when applicable
+     * @param language normalized source language
+     * @param ruleSetId selected rule-set identifier
+     * @param ruleSetName selected rule-set name snapshot
+     * @param status processing status
+     * @param scannedFiles number of processed files
+     * @param skippedFiles number of skipped files
+     * @param warning non-fatal processing warning
+     * @param error terminal error message
+     * @param createdAt creation timestamp
+     * @param updatedAt last status-update timestamp
+     * @param summary finding counts grouped by severity
+     */
     public record ReviewView(String id, String inputType, String repositoryUrl, String requestedRef,
                              String commitSha, String fileName, String language, String ruleSetId,
                              String ruleSetName, String status, int scannedFiles, int skippedFiles,
                              String warning, String error, Instant createdAt, Instant updatedAt,
                              Map<String, Long> summary) {}
+    /** Public finding view; line numbers remain tied to the reviewed source.
+     * @param id finding identifier
+     * @param ruleId rule that produced the finding
+     * @param ruleVersion rule version used during review
+     * @param severity finding severity
+     * @param title finding title
+     * @param explanation finding explanation
+     * @param evidence source evidence
+     * @param suggestedFix remediation suggestion
+     * @param filePath source path
+     * @param lineStart first one-based affected line
+     * @param lineEnd last one-based affected line
+     * @param source static or AI finding source
+     * @param feedback user feedback value, if provided
+     */
     public record FindingView(String id, String ruleId, int ruleVersion, String severity, String title,
                               String explanation, String evidence, String suggestedFix, String filePath,
                               Integer lineStart, Integer lineEnd, String source, String feedback) {}
+    /** Paginated findings response after optional filters are applied.
+     * @param items findings on the current page
+     * @param total total matching findings
+     * @param page zero-based page number
+     * @param size page size
+     */
     public record FindingPage(List<FindingView> items, int total, int page, int size) {}
+    /** Paginated review history response.
+     * @param items reviews on the current page
+     * @param total total owner-scoped reviews
+     * @param page zero-based page number
+     * @param size page size
+     */
     public record ReviewPage(List<ReviewView> items, long total, int page, int size) {}
 
     private static final Set<String> FEEDBACK = Set.of("HELPFUL", "IRRELEVANT", "FALSE_POSITIVE");
@@ -49,15 +107,35 @@ public class ReviewService {
     private final GitHubService github;
     private final ReviewWorker worker;
     private final int maxPasteChars;
+    /** Creates the review use-case service and its external collaborators.
+     * @param reviews review repository
+     * @param findings finding repository
+     * @param rules rule snapshot service
+     * @param github GitHub integration service
+     * @param worker asynchronous review worker
+     * @param maxPasteChars maximum accepted pasted-source length
+     */
     public ReviewService(ReviewRepository reviews, FindingRepository findings, RuleService rules,
                          GitHubService github, ReviewWorker worker, @Value("${app.max-paste-chars}") int maxPasteChars) {
         this.reviews = reviews; this.findings = findings; this.rules = rules;
         this.github = github; this.worker = worker; this.maxPasteChars = maxPasteChars;
     }
 
+    /** Inspects a repository before an asynchronous review is created.
+     * @param url user-supplied public repository URL
+     * @return repository metadata
+     */
     public RepoInfo inspect(String url) { return github.inspect(github.parse(url)); }
 
+    /** Creates an idempotent asynchronous review for a pinned repository commit.
+     * @param owner authenticated application user ID
+     * @param input repository review request
+     * @param key optional idempotency key
+     * @return queued or previously-created review view
+     * @throws ResponseStatusException when input is invalid, ownership fails, or capacity is full
+     */
     public ReviewView createRepository(String owner, RepositoryInput input, String key) {
+        // The hash binds an idempotency key to the complete logical request, not just its key string.
         key = key == null || key.isBlank() ? null : key;
         if (input == null || input.ruleSetId() == null) throw invalid("Rule set is required");
         Repo repo = github.parse(input.repositoryUrl());
@@ -79,6 +157,13 @@ public class ReviewService {
         return view(review);
     }
 
+    /** Creates an idempotent asynchronous review for one pasted source file.
+     * @param owner authenticated application user ID
+     * @param input pasted-source review request
+     * @param key optional idempotency key
+     * @return queued or previously-created review view
+     * @throws ResponseStatusException when input is invalid, source is too large, or capacity is full
+     */
     public ReviewView createPaste(String owner, PasteInput input, String key) {
         key = key == null || key.isBlank() ? null : key;
         if (input == null || input.code() == null || input.code().isBlank() || input.ruleSetId() == null)
@@ -103,17 +188,47 @@ public class ReviewService {
         return view(review);
     }
 
+    /** Returns one owner's review history using bounded pagination.
+     * @param owner authenticated application user ID
+     * @param page zero-based page number
+     * @param size page size, between 1 and 100
+     * @return owner-scoped review page
+     * @throws ResponseStatusException when pagination is outside the accepted range
+     */
     public ReviewPage list(String owner, int page, int size) {
         if (page < 0 || size < 1 || size > 100) throw invalid("Invalid pagination");
         var result = reviews.findByOwnerId(owner, PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
         return new ReviewPage(result.getContent().stream().map(this::view).toList(), result.getTotalElements(), page, size);
     }
+    /** Returns a review only when it belongs to the requesting owner.
+     * @param owner authenticated application user ID
+     * @param id review identifier
+     * @return review view
+     * @throws ResponseStatusException when the review is missing or not owned by the user
+     */
     public ReviewView get(String owner, String id) { return view(owned(owner, id)); }
+    /** Loads a review while returning not-found for both missing and foreign IDs.
+     * @param owner authenticated application user ID
+     * @param id review identifier
+     * @return persisted owner-scoped review
+     * @throws ResponseStatusException when the review is missing or belongs to another user
+     */
     public ReviewEntity owned(String owner, String id) {
         ReviewEntity review = reviews.findById(id).orElseThrow(() -> missing("Review"));
         if (!review.ownerId.equals(owner)) throw missing("Review");
         return review;
     }
+    /** Returns owner-checked findings after optional filters and pagination.
+     * @param owner authenticated application user ID
+     * @param id review identifier
+     * @param severity optional severity filter
+     * @param ruleId optional rule filter
+     * @param file optional exact path filter
+     * @param page zero-based page number
+     * @param size page size, between 1 and 100
+     * @return filtered finding page
+     * @throws ResponseStatusException when the review is not owned or pagination is invalid
+     */
     public FindingPage findings(String owner, String id, String severity, String ruleId, String file, int page, int size) {
         owned(owner, id);
         if (page < 0 || size < 1 || size > 100) throw invalid("Invalid pagination");
@@ -126,6 +241,14 @@ public class ReviewService {
         if (from >= filtered.size()) return new FindingPage(List.of(), filtered.size(), page, size);
         return new FindingPage(filtered.subList((int) from, (int) Math.min(from + size, filtered.size())), filtered.size(), page, size);
     }
+    /** Stores one of the supported feedback values for an owned finding.
+     * @param owner authenticated application user ID
+     * @param reviewId review identifier
+     * @param findingId finding identifier
+     * @param value one of the supported feedback values
+     * @return updated finding view
+     * @throws ResponseStatusException when ownership, finding identity, or feedback value is invalid
+     */
     public FindingView feedback(String owner, String reviewId, String findingId, String value) {
         owned(owner, reviewId);
         if (value == null || !FEEDBACK.contains(value)) throw invalid("Invalid feedback");
@@ -134,12 +257,19 @@ public class ReviewService {
         finding.feedback = value; finding.feedbackAt = Instant.now();
         return view(findings.save(finding));
     }
+    /** Cancels a queued or running review and leaves terminal reviews unchanged.
+     * @param owner authenticated application user ID
+     * @param id review identifier
+     * @return updated cancelled review view
+     * @throws ResponseStatusException when the review is missing, foreign, or already terminal
+     */
     public ReviewView cancel(String owner, String id) {
         ReviewEntity r = owned(owner, id);
         if (!Set.of("QUEUED", "RUNNING").contains(r.status)) throw new ResponseStatusException(HttpStatus.CONFLICT, "Review already finished");
         r.status = "CANCELLED"; r.updatedAt = Instant.now();
         return view(reviews.save(r));
     }
+    /** Marks work interrupted by a process restart as failed instead of leaving it queued forever. */
     @EventListener(ApplicationReadyEvent.class)
     public void markInterrupted() {
         for (ReviewEntity r : reviews.findByStatusIn(List.of("QUEUED", "RUNNING"))) {

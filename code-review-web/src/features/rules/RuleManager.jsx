@@ -20,6 +20,7 @@ export default function RuleManager({ rules, reload }) {
     catch (e) { setError(e.message); }
   }
 
+  // An empty literal match deliberately selects the semantic AI path on the server.
   return <div className="stack"><section className="card"><h2>{editing ? 'Edit rule' : 'Create rule'}</h2><p className="muted">A literal match runs without AI. Leave it empty for semantic AI review.</p>
     <ErrorNotice message={error} clear={() => setError('')} />
     <form onSubmit={save} className="form-stack"><div className="grid-two"><label>Name<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required maxLength={120} /></label><label>Category<input value={form.category || ''} onChange={e => setForm({ ...form, category: e.target.value })} /></label></div>

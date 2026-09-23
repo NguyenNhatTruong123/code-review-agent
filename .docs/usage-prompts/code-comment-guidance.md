@@ -19,11 +19,13 @@ Mọi prompt nên yêu cầu AI thực hiện theo thứ tự:
 
 1. Đọc `requirements.md` và `coding-rules.md`.
 2. Đọc file mục tiêu và các class/method liên quan.
-3. Phân loại nơi nào cần Javadoc, comment định hướng hoặc không cần comment.
-4. Chỉ thêm comment có giá trị thông tin.
-5. Không thay đổi logic trong cùng patch.
-6. Kiểm tra diff để phát hiện thay đổi ngoài comment.
-7. Chạy compile/test phù hợp.
+3. Lập danh sách đầy đủ mọi public Java class, interface, record, constructor, method và API.
+4. Bắt buộc thêm Javadoc chuẩn `/** ... */` cho từng declaration trong danh sách, trừ getter/setter hiển nhiên theo coding rules.
+5. Với từng Javadoc, kiểm tra `@param` cho mọi tham số/record component, `@return` cho API trả kết quả và `@throws` cho exception quan trọng hoặc exception được khai báo.
+6. Chỉ thêm comment private hoặc inline khi có giá trị thông tin.
+7. Không thay đổi logic trong cùng patch.
+8. Kiểm tra diff để phát hiện thay đổi ngoài comment.
+9. Chạy compile/test phù hợp.
 
 Không nên dùng prompt chung như:
 
@@ -37,13 +39,32 @@ Prompt này dễ tạo ra comment dạng kể lại code, làm file dài hơn nh
 
 | Đối tượng | Cách viết |
 |---|---|
-| Public class/interface/record | Javadoc nêu trách nhiệm và boundary chính. |
-| Public method/API | Javadoc nêu mục đích, input/output và exception quan trọng nếu có. |
+| Public class/interface/record | **Bắt buộc** có Javadoc `/** ... */` nêu trách nhiệm và boundary chính; record phải mô tả từng component bằng `@param`. |
+| Public constructor/method/API | **Bắt buộc** có Javadoc nêu mục đích; dùng `@param` cho từng tham số, `@return` nếu có kết quả và `@throws` cho exception quan trọng/khi khai báo `throws`. |
 | Private method đơn giản | Thường không cần comment nếu tên hàm đã rõ. |
 | Block xử lý phức tạp | Comment ngắn giải thích `why`, invariant hoặc thứ tự bắt buộc. |
 | Security/transaction/retry/timeout/concurrency | Nên có comment về constraint và lý do. |
-| Getter/setter/constructor hiển nhiên | Không thêm comment máy móc. |
+| Getter/setter hiển nhiên | Không thêm comment máy móc; không dùng ngoại lệ này cho public API khác. |
 | TODO/workaround | Chỉ giữ khi có context, lý do và bước tiếp theo rõ ràng. |
+
+Mẫu Javadoc bắt buộc cho public method:
+
+```java
+/**
+ * Adds two large non-negative numbers represented as digit strings.
+ *
+ * @param firstOperand first digit-string operand
+ * @param secondOperand second digit-string operand
+ * @return the sum represented as a digit string
+ * @throws IllegalArgumentException if either operand is null, empty, or contains a non-digit
+ */
+public String add(String firstOperand, String secondOperand) {
+	// implementation remains unchanged
+}
+```
+
+Không sao chép máy móc mẫu trên: nội dung tag phải phản ánh đúng signature, output,
+exception và invariant thực tế của từng API.
 
 ## 4. Prompt audit trước khi sửa
 
@@ -63,14 +84,14 @@ File cần audit:
 Chỉ phân tích, chưa chỉnh sửa file.
 
 Hãy trả về bảng gồm:
-1. Class/interface/record nào cần Javadoc.
-2. Public method/API nào cần Javadoc.
+1. Toàn bộ class/interface/record/constructor/public method/API và trạng thái Javadoc của từng declaration.
+2. Declaration public nào thiếu Javadoc hoặc thiếu `@param`, `@return`, `@throws` cần thiết; đây là lỗi bắt buộc phải xử lý.
 3. Block logic nào cần comment giải thích lý do hoặc invariant.
 4. Comment hiện có nào sai, lỗi thời hoặc dư thừa.
 5. Các phần không nên thêm comment.
 6. Xác nhận rằng việc thêm comment có thể thực hiện mà không đổi behavior.
 
-Tuân thủ coding-rules.md. Không đề xuất comment chỉ mô tả lại code từng dòng.
+Tuân thủ coding-rules.md. Audit chỉ được kết luận đạt khi mọi public Java declaration có Javadoc đúng format và đủ tag theo contract. Không đề xuất comment chỉ mô tả lại code từng dòng.
 ```
 
 ## 5. Prompt thêm comment cho một file Java
@@ -86,7 +107,9 @@ Hãy cập nhật comment/Javadoc cho file:
 - .docs/coding-rules.md, mục “Quy tắc viết comment và Javadoc”
 
 Yêu cầu:
-- Thêm Javadoc cho public class, interface, record và public method/API quan trọng.
+- BẮT BUỘC thêm Javadoc chuẩn `/** ... */` cho mọi public class, interface, record, constructor, method và API trong file, trừ getter/setter hiển nhiên.
+- Không được bỏ qua public declaration vì nó ngắn, một dòng hoặc chỉ forward sang service.
+- Với mọi tham số hoặc record component phải có `@param`; method có return value phải có `@return`; method có exception quan trọng hoặc khai báo `throws` phải có `@throws`.
 - Comment phải giải thích trách nhiệm, mục đích, input/output hoặc exception khi cần.
 - Chỉ thêm comment cho private logic nếu có lý do không hiển nhiên, invariant, workaround hoặc constraint bên ngoài.
 - Không thêm comment cho getter, setter, assignment hoặc câu lệnh hiển nhiên.
@@ -95,8 +118,9 @@ Yêu cầu:
 
 Sau khi sửa:
 1. Kiểm tra diff và xác nhận thay đổi chỉ liên quan comment/Javadoc.
-2. Chạy compile/test phù hợp với module.
-3. Báo rõ các vùng đã thêm comment và lệnh validation đã chạy.
+2. Audit lại từng public Java declaration; nếu còn thiếu Javadoc hoặc tag contract thì chưa hoàn tất.
+3. Chạy compile/test phù hợp với module.
+4. Báo rõ các vùng đã thêm comment và lệnh validation đã chạy.
 ```
 
 ## 6. Prompt thêm comment cho một file Spring Controller/Service
@@ -121,6 +145,8 @@ Comment cần làm rõ:
 - lý do của transaction, security, retry, timeout hoặc trạng thái nếu code có sử dụng
 - boundary giữa HTTP mapping và business logic
 
+Mọi public class, constructor, endpoint method và public API trong file đều bắt buộc có Javadoc; comment inline không thay thế được Javadoc. Endpoint Javadoc phải có `@param` cho path/query/body/header và `@return` cho response khi có.
+
 Không comment lại annotation một cách máy móc và không refactor code.
 Sau khi sửa hãy kiểm tra diff và compile module backend.
 ```
@@ -132,6 +158,8 @@ Hãy bổ sung comment/Javadoc cho file thuộc code-review-ai:
 [FILE_PATH]
 
 Tuân thủ coding-rules.md và giữ nguyên behavior.
+
+Mọi public class, record, constructor và method phải có Javadoc chuẩn với `@param`, `@return`, `@throws` theo contract. Nếu audit phát hiện một declaration public thiếu Javadoc hoặc thiếu tag thì phải bổ sung trước khi báo hoàn tất.
 
 Comment cần ưu tiên giải thích:
 - input/output schema
@@ -178,7 +206,7 @@ Phạm vi:
 - code-review-web
 
 Đọc .docs/coding-rules.md và kiểm tra:
-1. Public Java API quan trọng đã có Javadoc phù hợp chưa.
+1. Mọi public Java class/interface/record/constructor/method/API đã có Javadoc chuẩn và đủ `@param`, `@return`, `@throws` theo contract chưa; thiếu Javadoc/tag là finding bắt buộc.
 2. Comment có giải thích why thay vì lặp lại what không.
 3. Comment có lỗi thời hoặc mâu thuẫn với code không.
 4. Comment có chứa secret, token, prompt nội bộ hoặc dữ liệu nhạy cảm không.
@@ -192,6 +220,8 @@ Report phải phân loại theo:
 - Redundant comment
 - Sensitive information
 - No action needed
+
+Không được trả về `No action needed` hoặc kết luận đạt nếu còn bất kỳ public Java declaration nào thiếu Javadoc hoặc thiếu tag contract cần thiết.
 ```
 
 ## 10. Prompt kiểm tra không đổi logic
@@ -211,6 +241,8 @@ Kiểm tra xem patch có thay đổi bất kỳ nội dung nào ngoài comment/J
 - configuration
 - API endpoint
 - dependency
+
+Ngoài việc kiểm tra comment-only, phải kiểm tra rằng mọi public Java declaration mới hoặc bị ảnh hưởng vẫn có Javadoc bắt buộc và đủ `@param`, `@return`, `@throws` theo signature.
 
 Nếu có thay đổi ngoài comment, chỉ rõ file và dòng. Nếu không có, xác nhận patch chỉ bổ sung hoặc chỉnh comment.
 ```
@@ -284,7 +316,8 @@ Phạm vi file:
 [LIST_FILE_PATHS]
 
 Quy tắc:
-- Javadoc cho public Java API quan trọng.
+- BẮT BUỘC có Javadoc chuẩn `/** ... */` cho mọi public Java class, interface, record, constructor, method và API; getter/setter hiển nhiên là ngoại lệ duy nhất.
+- BẮT BUỘC dùng `@param` cho từng tham số/record component, `@return` cho method trả kết quả và `@throws` cho exception quan trọng hoặc exception khai báo trong signature.
 - Comment ngắn và giải thích why, invariant, constraint hoặc behavior không hiển nhiên.
 - Không comment lại từng dòng code.
 - Không thêm comment cho getter/setter hoặc code hiển nhiên.
@@ -294,10 +327,11 @@ Quy tắc:
 
 Quy trình:
 1. Audit và liệt kê vị trí cần comment.
-2. Thêm comment/Javadoc theo từng file.
+2. Thêm Javadoc đầy đủ cho từng public Java declaration trước khi thêm comment inline.
 3. Review diff để xác nhận chỉ thay đổi comment.
-4. Chạy validation phù hợp.
-5. Báo cáo file đã sửa, lý do thêm comment và kết quả validation.
+4. Audit lại để xác nhận không còn public Java declaration thiếu Javadoc hoặc thiếu tag contract.
+5. Chạy validation phù hợp.
+6. Báo cáo file đã sửa, lý do thêm comment và kết quả validation.
 
 Nếu phát hiện code có bug hoặc compile error, không tự sửa trong patch này. Ghi riêng issue đó để xử lý ở task khác.
 Không báo hoàn tất nếu chưa kiểm tra diff và validation.
@@ -307,7 +341,8 @@ Không báo hoàn tất nếu chưa kiểm tra diff và validation.
 
 - [ ] Đã đọc `requirements.md` và `coding-rules.md`.
 - [ ] Đã audit trước khi thêm comment.
-- [ ] Public Java API quan trọng có Javadoc phù hợp.
+- [ ] Mọi public Java class/interface/record/constructor/method/API có Javadoc chuẩn; không còn declaration hoặc tag contract thiếu.
+- [ ] Javadoc có `@param`, `@return`, `@throws` đúng với signature và behavior.
 - [ ] Comment giải thích mục đích hoặc ràng buộc, không lặp lại code.
 - [ ] Không có comment lỗi thời hoặc mâu thuẫn implementation.
 - [ ] Không có secret/token/dữ liệu nhạy cảm trong comment.

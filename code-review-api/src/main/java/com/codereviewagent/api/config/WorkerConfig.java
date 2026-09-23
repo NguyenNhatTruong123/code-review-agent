@@ -11,6 +11,7 @@ import com.codereviewagent.ai.service.AiReviewService;
 import com.codereviewagent.ai.service.StaticReviewService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+/** Creates the bounded review executor and external review service clients. */
 @Configuration
 @EnableAsync
 public class WorkerConfig {

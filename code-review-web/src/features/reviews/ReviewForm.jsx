@@ -17,6 +17,7 @@ export default function ReviewForm({ sets, onCreated }) {
   const enabledSets = sets.filter(set => set.enabled);
 
   async function inspect() {
+    // Inspect first to show the server-resolved branch list before submitting a review.
     setError(''); setBusy(true); setRepoInfo(null);
     try { setRepoInfo(await api(`/github/inspect?${query({ url: repositoryUrl })}`)); }
     catch (e) { setError(e.message); }

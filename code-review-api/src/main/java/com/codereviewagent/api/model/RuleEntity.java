@@ -3,6 +3,7 @@ package com.codereviewagent.api.model;
 import jakarta.persistence.*;
 import java.time.Instant;
 
+/** User-owned rule definition whose version is captured in review snapshots. */
 @Entity
 @Table(name = "review_rules")
 public class RuleEntity {
@@ -21,6 +22,10 @@ public class RuleEntity {
     public Instant createdAt;
     public Instant updatedAt;
     protected RuleEntity() {}
+    /** Creates a new rule owned by the supplied application user.
+     * @param id rule identifier
+     * @param ownerId owning application user ID
+     */
     public RuleEntity(String id, String ownerId) {
         this.id = id; this.ownerId = ownerId; this.createdAt = Instant.now();
     }

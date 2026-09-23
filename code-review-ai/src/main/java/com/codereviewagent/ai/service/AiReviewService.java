@@ -14,7 +14,20 @@ import java.util.Map;
 
 /** Sends source as untrusted data and returns candidates; the API must validate them. */
 public class AiReviewService {
+    /** Rule instruction passed to the provider for one review invocation.
+     * @param id stable rule identifier used to associate candidates with a rule
+     * @param instruction rule text supplied to the provider as untrusted input
+     */
     public record RuleSpec(String id, String instruction) {}
+    /** Untrusted provider candidate; callers must verify rule identity, evidence, and line bounds.
+     * @param ruleId identifier of the rule that the provider says was violated
+     * @param title short finding title
+     * @param explanation reason the source violates the rule
+     * @param evidence exact source substring supporting the finding
+     * @param suggestedFix proposed remediation
+     * @param lineStart one-based first affected line
+     * @param lineEnd one-based last affected line
+     */
     public record Candidate(String ruleId, String title, String explanation,
                             String evidence, String suggestedFix, Integer lineStart, Integer lineEnd) {}
 
@@ -25,6 +38,12 @@ public class AiReviewService {
     private final String apiKey;
     private final String model;
 
+    /** Creates a provider adapter using the supplied HTTP client and model configuration.
+     * @param mapper JSON serializer used for provider requests and responses
+     * @param client HTTP client used to call the provider
+     * @param apiKey provider credential; it is retained only for authenticated requests
+     * @param model provider model identifier
+     */
     public AiReviewService(ObjectMapper mapper, HttpClient client, String apiKey, String model) {
         this.mapper = mapper;
         this.client = client;
@@ -32,10 +51,23 @@ public class AiReviewService {
         this.model = model;
     }
 
+    /** Reports whether the provider can be called without exposing credentials.
+     * @return {@code true} when a non-blank provider key is configured
+     */
     public boolean available() {
         return apiKey != null && !apiKey.isBlank();
     }
 
+    /** Requests structured candidates and preserves provider failures for the caller to classify.
+     * @param path source path supplied as candidate context
+     * @param language normalized source language
+     * @param code source text to inspect
+     * @param rules rules evaluated by the provider
+     * @return provider candidates; empty when no rules are supplied
+     * @throws IOException when serialization, transport, or provider response parsing fails
+     * @throws InterruptedException when the provider request is interrupted
+     * @throws IllegalStateException when the provider is not configured
+     */
     public List<Candidate> review(String path, String language, String code, List<RuleSpec> rules)
             throws IOException, InterruptedException {
         if (rules.isEmpty()) return List.of();

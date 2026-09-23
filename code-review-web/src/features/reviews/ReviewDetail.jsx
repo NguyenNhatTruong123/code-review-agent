@@ -12,6 +12,7 @@ export default function ReviewDetail({ review, rules, onRefresh, onBack }) {
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
+    // Filters are part of the request identity, so changing one resets the server query via page state.
     try { setFindings(await api(`/reviews/${review.id}/findings?${query({ severity, ruleId, file, page, size: PAGE_SIZE })}`)); }
     catch (e) { setError(e.message); }
   }, [review.id, severity, ruleId, file, page]);

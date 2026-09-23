@@ -38,6 +38,7 @@ export default function App() {
     } catch (e) { setError(e.message); }
   }
 
+  // Probe the existing session once; authenticated data is loaded through the same shared refresh.
   useEffect(() => { api('/auth/me').then(me => { setUser(me); return reload(); }).catch(() => {}).finally(() => setLoading(false)); }, [reload]);
 
   const refreshSelected = useCallback(async () => {

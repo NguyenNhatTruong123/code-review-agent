@@ -1,5 +1,6 @@
 const BASE = '/api/v1';
 
+// Spring Security issues the CSRF cookie through the same-origin session before mutations.
 async function csrfToken() {
   const response = await fetch(`${BASE}/auth/csrf`, { credentials: 'same-origin' });
   if (!response.ok) throw new Error('Could not initialize the session');
@@ -21,6 +22,7 @@ export async function api(path, { method = 'GET', body } = {}) {
 }
 
 export function query(params) {
+  // Omit empty filters so the server can distinguish an unset filter from a real value.
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') search.set(key, value);

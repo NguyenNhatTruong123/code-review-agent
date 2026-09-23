@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+/** Executes queued reviews asynchronously and persists validated findings. */
 @Service
 public class ReviewWorker {
     private static final Logger LOG = LoggerFactory.getLogger(ReviewWorker.class);
@@ -32,12 +33,25 @@ public class ReviewWorker {
     private final StaticReviewService staticReview;
     private final AiReviewService ai;
     private final ObjectMapper mapper;
+    /** Creates an asynchronous worker with persistence and review-engine collaborators.
+     * @param reviews review repository
+     * @param findings finding repository
+     * @param github GitHub archive service
+     * @param staticReview deterministic literal-review engine
+     * @param ai semantic-review provider adapter
+     * @param mapper JSON mapper for persisted rule snapshots
+     */
     public ReviewWorker(ReviewRepository reviews, FindingRepository findings, GitHubService github,
                         StaticReviewService staticReview, AiReviewService ai, ObjectMapper mapper) {
         this.reviews = reviews; this.findings = findings; this.github = github;
         this.staticReview = staticReview; this.ai = ai; this.mapper = mapper;
     }
 
+    /** Processes a pinned GitHub commit; the API has already created the review record.
+     * @param reviewId queued review identifier
+     * @param repo parsed repository identity
+     * @param sha immutable commit SHA
+     */
     @Async("reviewExecutor")
     public void repository(String reviewId, GitHubService.Repo repo, String sha) {
         try {
@@ -51,6 +65,12 @@ public class ReviewWorker {
         } catch (Exception e) { fail(reviewId, e); }
     }
 
+    /** Processes pasted code using the same rule and finding pipeline as repository reviews.
+     * @param reviewId queued review identifier
+     * @param code pasted source text
+     * @param path logical source filename
+     * @param language normalized source language
+     */
     @Async("reviewExecutor")
     public void paste(String reviewId, String code, String path, String language) {
         try {
@@ -75,6 +95,7 @@ public class ReviewWorker {
         int scanned = 0;
         boolean evaluated = false;
         for (SourceFile file : files) {
+            // Re-read status before each file so cancellation stops work between source files.
             if ("CANCELLED".equals(reviews.findById(id).orElseThrow().status)) return;
             List<RuleSnapshot> applicable = rules.stream().filter(rule -> languageMatches(rule.languages(), file.language())).toList();
             List<StaticReviewService.Rule> literal = applicable.stream()
@@ -88,6 +109,7 @@ public class ReviewWorker {
             }
             List<RuleSnapshot> semantic = applicable.stream().filter(rule -> rule.matchText() == null || rule.matchText().isBlank()).toList();
             if (!semantic.isEmpty()) {
+                // Literal rules are deterministic; only rules without matchText are sent to the AI adapter.
                 if (!ai.available()) warnings.add("AI unavailable: semantic rules skipped for " + file.path());
                 else {
                     try {
@@ -133,6 +155,7 @@ public class ReviewWorker {
         return rules.stream().filter(rule -> rule.id().equals(id)).findFirst().orElseThrow();
     }
     static boolean validCandidate(AiReviewService.Candidate c, String code, int lines) {
+        // AI output is untrusted: require valid bounds and exact evidence from the reviewed source.
         if (c.ruleId() == null || c.title() == null || c.title().isBlank() || c.explanation() == null
                 || c.explanation().isBlank() || c.suggestedFix() == null || c.suggestedFix().isBlank()
                 || c.evidence() == null || c.evidence().isBlank() || c.evidence().length() > 500
