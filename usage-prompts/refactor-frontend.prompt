@@ -1,0 +1,3 @@
+File code này chưa thực sự clean, chưa có bất kì comment code nào, và hầu như tất cả các hàm đều được chứa trong file này.
+Hãy refactor file này bằng cách tách ra thành các component riêng, util, const,... và thực hiện thêm comment.
+Yêu cầu: KHÔNG ĐƯỢC LÀM THAY ĐỔI LOGIC HIỆN CÓ.
