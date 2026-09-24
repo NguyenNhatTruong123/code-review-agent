@@ -18,7 +18,26 @@ public interface ReviewRepository extends JpaRepository<ReviewEntity, String> {
      * @param pageable page and sort request
      * @return owner-scoped review page
      */
-    Page<ReviewEntity> findByOwnerId(String ownerId, Pageable pageable);
+    Page<ReviewEntity> findByOwnerIdAndParentReviewIdIsNull(String ownerId, Pageable pageable);
+
+    /**
+     * Lists reruns belonging to one original review in chronological order.
+     *
+     * @param ownerId owning application user ID
+     * @param parentReviewId original review identifier
+     * @return owner-scoped reruns
+     */
+    List<ReviewEntity> findByOwnerIdAndParentReviewIdOrderByCreatedAtAsc(
+            String ownerId, String parentReviewId);
+
+    /**
+     * Counts reruns so review-history controls can be rendered without loading them all.
+     *
+     * @param ownerId owning application user ID
+     * @param parentReviewId original review identifier
+     * @return number of owner-scoped reruns
+     */
+    long countByOwnerIdAndParentReviewId(String ownerId, String parentReviewId);
 
     /**
      * Finds in-flight reviews that must be recovered or marked terminal.

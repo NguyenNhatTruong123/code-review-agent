@@ -395,6 +395,31 @@ public class RuleService {
         }
     }
 
+    /**
+     * Decodes the immutable rule snapshot recorded for a completed review.
+     *
+     * @param value persisted rule snapshot JSON
+     * @return immutable versioned rule snapshots
+     * @throws IllegalStateException when the stored snapshot is unavailable or invalid
+     */
+    public List<RuleSnapshot> readSnapshot(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("Review rule snapshot is unavailable");
+        }
+
+        try {
+            RuleSnapshot[] snapshots = mapper.readValue(value, RuleSnapshot[].class);
+            if (snapshots == null
+                    || snapshots.length == 0
+                    || Arrays.stream(snapshots).anyMatch(snapshot -> snapshot == null)) {
+                throw new IllegalStateException("Review rule snapshot is unavailable");
+            }
+            return List.copyOf(Arrays.asList(snapshots));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Review rule snapshot is invalid", e);
+        }
+    }
+
     private RuleView view(RuleEntity r) {
         return new RuleView(
                 r.id,

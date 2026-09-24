@@ -3,13 +3,19 @@ import { api, query } from '../../api.js';
 import ErrorNotice from '../../components/ErrorNotice.jsx';
 import { PAGE_SIZE, REVIEW_STATUSES, SEVERITIES } from '../../constants.js';
 
-export default function ReviewDetail({ review, rules, onRefresh, onDelete, onBack }) {
+export default function ReviewDetail({ review, rules, sets, onRefresh, onDelete, onRerun, onBack }) {
   const [findings, setFindings] = useState({ items: [], total: 0, page: 0, size: PAGE_SIZE });
   const [severity, setSeverity] = useState('');
   const [ruleId, setRuleId] = useState('');
   const [file, setFile] = useState('');
   const [page, setPage] = useState(0);
   const [error, setError] = useState('');
+  const [rerunOpen, setRerunOpen] = useState(false);
+  const [rerunMode, setRerunMode] = useState('ORIGINAL');
+  const [rerunRuleSetId, setRerunRuleSetId] = useState('');
+  const [rerunError, setRerunError] = useState('');
+  const [rerunning, setRerunning] = useState(false);
+  const enabledSets = sets.filter(set => set.enabled);
 
   const load = useCallback(async () => {
     // Filters are part of the request identity, so changing one resets the server query via page state.
@@ -18,6 +24,13 @@ export default function ReviewDetail({ review, rules, onRefresh, onDelete, onBac
   }, [review.id, severity, ruleId, file, page]);
 
   useEffect(() => { load(); }, [load, review.status]);
+
+  useEffect(() => {
+    setRerunOpen(false);
+    setRerunMode('ORIGINAL');
+    setRerunRuleSetId('');
+    setRerunError('');
+  }, [review.id]);
 
   // Poll only while the server is processing the review, then release the timer.
   useEffect(() => {
@@ -36,6 +49,24 @@ export default function ReviewDetail({ review, rules, onRefresh, onDelete, onBac
     catch (e) { setError(e.message); }
   }
 
+  async function rerun(event) {
+    event.preventDefault();
+    setRerunError('');
+    setRerunning(true);
+
+    try {
+      const nextReview = await api(`/reviews/${review.id}/rerun`, {
+        method: 'POST',
+        body: { ruleMode: rerunMode, ruleSetId: rerunMode === 'CURRENT' ? rerunRuleSetId : null },
+      });
+      await onRerun(nextReview);
+    } catch (e) {
+      setRerunError(e.message);
+    } finally {
+      setRerunning(false);
+    }
+  }
+
   return <div className="stack">
     <button type="button" className="back-button" onClick={onBack}>← All reviews</button>
     <section className="card">
@@ -43,7 +74,23 @@ export default function ReviewDetail({ review, rules, onRefresh, onDelete, onBac
       <div className="meta-grid"><div><b>Rule set</b><span>{review.ruleSetName}</span></div><div><b>Scanned files</b><span>{review.scannedFiles}</span></div><div><b>Skipped files</b><span>{review.skippedFiles}</span></div>{review.commitSha && <div><b>Commit</b><code title={review.commitSha}>{review.commitSha.slice(0, 12)}</code></div>}</div>
       {review.warning && <div className="notice warning">{review.warning}</div>}{review.error && <div className="notice error">{review.error}</div>}
       {REVIEW_STATUSES.includes(review.status) && <div className="inline"><span className="muted">Review in progress…</span><button type="button" onClick={cancel}>Cancel</button></div>}
-      {!REVIEW_STATUSES.includes(review.status) && <button type="button" className="danger" onClick={() => onDelete(review)}>Delete review</button>}
+      <div className="inline"><button type="button" className="primary" onClick={() => setRerunOpen(open => !open)}>Rerun review</button>{!REVIEW_STATUSES.includes(review.status) && <button type="button" className="danger" onClick={() => onDelete(review)}>Delete review</button>}</div>
+      {rerunOpen && <div className="rerun-panel">
+        <h3>Rerun review</h3>
+        <p className="muted">A rerun creates a new review. This review and its findings stay unchanged.</p>
+        <div className="rerun-source"><b>Source</b>{review.inputType === 'GITHUB' ? <span><span className="ref-name">{review.repositoryUrl}</span>{review.requestedRef && <> · requested ref <code>{review.requestedRef}</code></>}{review.commitSha && <> · pinned commit <code title={review.commitSha}>{review.commitSha}</code></>}</span> : <span>{review.fileName || 'Pasted source file'}{review.language && <> · {review.language}</>}</span>}</div>
+        <ErrorNotice message={rerunError} clear={() => setRerunError('')} />
+        <form className="form-stack" onSubmit={rerun}>
+          <fieldset><legend>Rules for the new review</legend>
+            <label className="check"><input type="radio" name="rerun-rules" value="ORIGINAL" checked={rerunMode === 'ORIGINAL'} onChange={() => setRerunMode('ORIGINAL')} /> Use the original rule snapshot</label>
+            <p className="hint">Uses the exact rules saved with this review, even if they have changed or been deleted.</p>
+            <label className="check"><input type="radio" name="rerun-rules" value="CURRENT" checked={rerunMode === 'CURRENT'} onChange={() => setRerunMode('CURRENT')} /> Choose an enabled current rule set</label>
+            {rerunMode === 'CURRENT' && <label>Rule set<select value={rerunRuleSetId} onChange={e => setRerunRuleSetId(e.target.value)} required><option value="">Select a rule set</option>{enabledSets.map(set => <option key={set.id} value={set.id}>{set.name}</option>)}</select></label>}
+            {rerunMode === 'CURRENT' && enabledSets.length === 0 && <p className="muted">No enabled rule sets are available. Create or enable a rule set first.</p>}
+          </fieldset>
+          <div className="inline"><button className="primary" disabled={rerunning || (rerunMode === 'CURRENT' && !rerunRuleSetId)}>{rerunning ? 'Starting rerun…' : 'Start rerun'}</button><button type="button" onClick={() => setRerunOpen(false)} disabled={rerunning}>Cancel</button></div>
+        </form>
+      </div>}
       <div className="summary">{SEVERITIES.map(item => <span key={item} className={`severity ${item.toLowerCase()}`}>{item}: {review.summary?.[item] || 0}</span>)}</div>
     </section>
     <section className="card">

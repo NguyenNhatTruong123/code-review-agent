@@ -41,7 +41,7 @@ export default function App() {
   async function deleteReview(review) {
     const reviewName = review.repositoryUrl || review.fileName || review.id;
     const confirmation = `Delete review for ${reviewName}? Its findings and feedback will also be permanently removed.`;
-    if (!window.confirm(confirmation)) return;
+    if (!window.confirm(confirmation)) return false;
 
     try {
       await api(`/reviews/${review.id}`, { method: 'DELETE' });
@@ -51,8 +51,10 @@ export default function App() {
       setSelected(current => current?.id === review.id ? null : current);
       setTab('reviews');
       await loadReviewPage(nextPage);
+      return true;
     } catch (e) {
       setError(e.message);
+      return false;
     }
   }
 
@@ -81,7 +83,7 @@ export default function App() {
   const title = selected ? 'Review details' : PAGE_TITLES[tab];
   return <AppShell user={user} tab={tab} onTabChange={changeTab} onLogout={logout} title={title}>
     <ErrorNotice message={error} clear={() => setError('')} />
-    {selected ? <ReviewDetail review={selected} rules={rules} onRefresh={refreshSelected} onDelete={deleteReview} onBack={() => { setSelected(null); setTab('reviews'); reload(); }} /> : <>
+    {selected ? <ReviewDetail review={selected} rules={rules} sets={sets} onRefresh={refreshSelected} onDelete={deleteReview} onRerun={async review => { setSelected(review); setTab('reviews'); await reload(); }} onBack={() => { setSelected(null); setTab('reviews'); reload(); }} /> : <>
       {tab === 'new' && <ReviewForm sets={sets} onCreated={async review => { setSelected(review); setTab('reviews'); await reload(); }} />}
       {tab === 'reviews' && <ReviewHistory reviews={reviews} reviewPage={reviewPage} loadReviewPage={loadReviewPage} onDelete={deleteReview} onSelect={setSelected} />}
       {tab === 'rules' && <RuleManager rules={rules} reload={reload} />}

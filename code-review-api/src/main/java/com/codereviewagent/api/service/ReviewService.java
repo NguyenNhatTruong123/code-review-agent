@@ -22,6 +22,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -52,9 +54,18 @@ public class ReviewService {
     public record PasteInput(String code, String fileName, String language, String ruleSetId) {}
 
     /**
+     * Selects whether a rerun uses its stored rule snapshot or an enabled current rule set.
+     *
+     * @param ruleMode {@code ORIGINAL} or {@code CURRENT}
+     * @param ruleSetId required only when {@code ruleMode} is {@code CURRENT}
+     */
+    public record RerunInput(String ruleMode, String ruleSetId) {}
+
+    /**
      * Public review status view returned by the API.
      *
      * @param id review identifier
+     * @param parentReviewId original review identifier when this review is a rerun
      * @param inputType repository or paste input type
      * @param repositoryUrl canonical repository URL when applicable
      * @param requestedRef requested repository ref when applicable
@@ -70,10 +81,12 @@ public class ReviewService {
      * @param error terminal error message
      * @param createdAt creation timestamp
      * @param updatedAt last status-update timestamp
+     * @param rerunCount number of direct reruns created from this review
      * @param summary finding counts grouped by severity
      */
     public record ReviewView(
             String id,
+            String parentReviewId,
             String inputType,
             String repositoryUrl,
             String requestedRef,
@@ -89,6 +102,7 @@ public class ReviewService {
             String error,
             Instant createdAt,
             Instant updatedAt,
+            long rerunCount,
             Map<String, Long> summary) {}
 
     /**
@@ -136,14 +150,15 @@ public class ReviewService {
     /**
      * Paginated review history response.
      *
-     * @param items reviews on the current page
-     * @param total total owner-scoped reviews
+     * @param items original reviews on the current page
+     * @param total total owner-scoped original reviews
      * @param page zero-based page number
      * @param size page size
      */
     public record ReviewPage(List<ReviewView> items, long total, int page, int size) {}
 
     private static final Set<String> FEEDBACK = Set.of("HELPFUL", "IRRELEVANT", "FALSE_POSITIVE");
+    private static final Set<String> RERUN_RULE_MODES = Set.of("ORIGINAL", "CURRENT");
     private static final Set<String> LANGUAGES =
             Set.of(
                     "JAVA",
@@ -169,6 +184,8 @@ public class ReviewService {
     private final GitHubService github;
     private final ReviewWorker worker;
     private final int maxPasteChars;
+
+    private record RerunRules(String ruleSetId, String ruleSetName, String snapshotJson) {}
 
     /**
      * Creates the review use-case service and its external collaborators.
@@ -309,6 +326,7 @@ public class ReviewService {
                 new ReviewEntity(UUID.randomUUID().toString(), owner, "PASTE", input.ruleSetId());
         review.fileName = path;
         review.language = language;
+        review.pastedSource = input.code();
         review.ruleSetName = rules.ownedSet(input.ruleSetId(), owner).name;
         review.ruleSnapshotJson = rules.write(snapshot);
         review.idempotencyKey = key;
@@ -324,12 +342,136 @@ public class ReviewService {
     }
 
     /**
-     * Returns one owner's review history using bounded pagination.
+     * Queues a new review from an owned review's pinned source and selected rule strategy.
+     *
+     * @param owner authenticated application user ID
+     * @param id original review identifier
+     * @param input original-snapshot or current-rule-set selection
+     * @return newly queued review view
+     * @throws ResponseStatusException when the source, snapshot, rule set, or capacity is
+     *     unavailable
+     */
+    public ReviewView rerun(String owner, String id, RerunInput input) {
+        ReviewEntity original = owned(owner, id);
+        RerunRules rerunRules = selectRerunRules(owner, original, input);
+
+        if ("GITHUB".equals(original.inputType)) {
+            return rerunRepository(owner, original, rerunRules);
+        }
+        if ("PASTE".equals(original.inputType)) {
+            return rerunPaste(owner, original, rerunRules);
+        }
+
+        throw new ResponseStatusException(
+                HttpStatus.CONFLICT, "Original review source is unavailable");
+    }
+
+    private ReviewView rerunRepository(String owner, ReviewEntity original, RerunRules rerunRules) {
+        if (original.repositoryUrl == null
+                || original.repositoryUrl.isBlank()
+                || original.commitSha == null
+                || !original.commitSha.matches("[a-fA-F0-9]{40}")) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Original repository source is unavailable");
+        }
+
+        Repo repo;
+        try {
+            repo = github.parse(original.repositoryUrl);
+        } catch (ResponseStatusException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Original repository source is unavailable");
+        }
+
+        ReviewEntity rerun = newRerun(owner, original, rerunRules);
+        rerun.repositoryUrl = original.repositoryUrl;
+        rerun.requestedRef = original.requestedRef;
+        rerun.commitSha = original.commitSha;
+        reviews.save(rerun);
+
+        try {
+            worker.repository(rerun.id, repo, rerun.commitSha);
+        } catch (org.springframework.core.task.TaskRejectedException e) {
+            markQueueFull(rerun);
+        }
+        return view(rerun);
+    }
+
+    private ReviewView rerunPaste(String owner, ReviewEntity original, RerunRules rerunRules) {
+        if (original.pastedSource == null
+                || original.pastedSource.isBlank()
+                || original.fileName == null
+                || original.fileName.isBlank()
+                || original.language == null
+                || original.language.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Original pasted source is unavailable");
+        }
+
+        ReviewEntity rerun = newRerun(owner, original, rerunRules);
+        rerun.fileName = original.fileName;
+        rerun.language = original.language;
+        rerun.pastedSource = original.pastedSource;
+        reviews.save(rerun);
+
+        try {
+            worker.paste(rerun.id, rerun.pastedSource, rerun.fileName, rerun.language);
+        } catch (org.springframework.core.task.TaskRejectedException e) {
+            markQueueFull(rerun);
+        }
+        return view(rerun);
+    }
+
+    private RerunRules selectRerunRules(String owner, ReviewEntity original, RerunInput input) {
+        String mode = input == null || input.ruleMode() == null ? null : input.ruleMode().trim();
+        if (!RERUN_RULE_MODES.contains(mode)) {
+            throw invalid("Choose original rules or an enabled rule set");
+        }
+
+        if ("ORIGINAL".equals(mode)) {
+            try {
+                rules.readSnapshot(original.ruleSnapshotJson);
+                return new RerunRules(
+                        original.ruleSetId, original.ruleSetName, original.ruleSnapshotJson);
+            } catch (IllegalStateException e) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT, "Original rule snapshot is unavailable");
+            }
+        }
+
+        if (input.ruleSetId() == null || input.ruleSetId().isBlank()) {
+            throw invalid("Select an enabled rule set");
+        }
+
+        List<RuleSnapshot> snapshot = rules.snapshot(owner, input.ruleSetId());
+        String ruleSetName = rules.ownedSet(input.ruleSetId(), owner).name;
+        return new RerunRules(input.ruleSetId(), ruleSetName, rules.write(snapshot));
+    }
+
+    private ReviewEntity newRerun(String owner, ReviewEntity original, RerunRules rerunRules) {
+        ensureCapacity(owner);
+
+        ReviewEntity rerun =
+                new ReviewEntity(
+                        UUID.randomUUID().toString(),
+                        owner,
+                        original.inputType,
+                        rerunRules.ruleSetId());
+        rerun.parentReviewId =
+                original.parentReviewId == null ? original.id : original.parentReviewId;
+        rerun.ruleSetName = rerunRules.ruleSetName();
+        rerun.ruleSnapshotJson = rerunRules.snapshotJson();
+        rerun.inputHash = sha256(original.inputHash + "\n" + rerun.ruleSnapshotJson);
+        return rerun;
+    }
+
+    /**
+     * Returns one owner's original review groups using bounded pagination.
      *
      * @param owner authenticated application user ID
      * @param page zero-based page number
      * @param size page size, between 1 and 100
-     * @return owner-scoped review page
+     * @return owner-scoped original-review page
      * @throws ResponseStatusException when pagination is outside the accepted range
      */
     public ReviewPage list(String owner, int page, int size) {
@@ -337,7 +479,7 @@ public class ReviewService {
             throw invalid("Invalid pagination");
         }
         var result =
-                reviews.findByOwnerId(
+                reviews.findByOwnerIdAndParentReviewIdIsNull(
                         owner,
                         PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
         return new ReviewPage(
@@ -357,6 +499,24 @@ public class ReviewService {
      */
     public ReviewView get(String owner, String id) {
         return view(owned(owner, id));
+    }
+
+    /**
+     * Lists an original review's owned reruns in chronological order.
+     *
+     * @param owner authenticated application user ID
+     * @param id original or rerun review identifier
+     * @return reviews in the same rerun group, excluding the original review
+     * @throws ResponseStatusException when the review is missing or belongs to another user
+     */
+    public List<ReviewView> reruns(String owner, String id) {
+        ReviewEntity review = owned(owner, id);
+        String originalId = review.parentReviewId == null ? review.id : review.parentReviewId;
+        owned(owner, originalId);
+
+        return reviews.findByOwnerIdAndParentReviewIdOrderByCreatedAtAsc(owner, originalId).stream()
+                .map(this::view)
+                .toList();
     }
 
     /**
@@ -480,6 +640,12 @@ public class ReviewService {
                     HttpStatus.CONFLICT, "Cancel the review before deleting it");
         }
 
+        if (review.parentReviewId == null
+                && reviews.countByOwnerIdAndParentReviewId(owner, review.id) > 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Delete reruns before deleting the original review");
+        }
+
         findings.deleteByReviewId(review.id);
         reviews.delete(review);
     }
@@ -494,6 +660,50 @@ public class ReviewService {
             r.error = "Review was interrupted by a server restart";
             r.updatedAt = Instant.now();
             reviews.save(r);
+        }
+    }
+
+    /**
+     * Links reruns created before review grouping was introduced when their stored input hashes
+     * identify one unambiguous original review.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void linkLegacyReruns() {
+        List<ReviewEntity> allReviews = new ArrayList<>(reviews.findAll());
+        allReviews.sort(Comparator.comparing(review -> review.createdAt));
+        boolean changed = false;
+
+        for (ReviewEntity review : allReviews) {
+            if (review.parentReviewId != null
+                    || review.inputHash == null
+                    || review.ruleSnapshotJson == null) {
+                continue;
+            }
+
+            List<ReviewEntity> directParents =
+                    allReviews.stream()
+                            .filter(candidate -> candidate != review)
+                            .filter(candidate -> review.ownerId.equals(candidate.ownerId))
+                            .filter(candidate -> candidate.inputHash != null)
+                            .filter(
+                                    candidate ->
+                                            review.inputHash.equals(
+                                                    sha256(
+                                                            candidate.inputHash
+                                                                    + "\n"
+                                                                    + review.ruleSnapshotJson)))
+                            .toList();
+            if (directParents.size() == 1) {
+                ReviewEntity parent = directParents.get(0);
+                review.parentReviewId =
+                        parent.parentReviewId == null ? parent.id : parent.parentReviewId;
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            reviews.saveAll(allReviews);
         }
     }
 
@@ -537,6 +747,7 @@ public class ReviewService {
                         .collect(Collectors.groupingBy(f -> f.severity, Collectors.counting()));
         return new ReviewView(
                 r.id,
+                r.parentReviewId,
                 r.inputType,
                 r.repositoryUrl,
                 r.requestedRef,
@@ -552,6 +763,7 @@ public class ReviewService {
                 r.error,
                 r.createdAt,
                 r.updatedAt,
+                reviews.countByOwnerIdAndParentReviewId(r.ownerId, r.id),
                 summary);
     }
 

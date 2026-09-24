@@ -24,6 +24,10 @@ public class ReviewEntity {
     public String fileName;
     public String language;
 
+    @Lob public String pastedSource;
+
+    public String parentReviewId;
+
     @Column(name = "idempotency_key")
     public String idempotencyKey;
 
