@@ -187,6 +187,14 @@ export default function ReviewDetail({
             </div>
             <ErrorNotice message={rerunError} clear={() => setRerunError('')} />
             <form className="form-stack" onSubmit={rerun}>
+              {rerunMode === 'CURRENT' && (
+                <p className="required-note">
+                  <span className="required-mark" aria-hidden="true">
+                    *
+                  </span>{' '}
+                  Fields marked with an asterisk are required.
+                </p>
+              )}
               <fieldset>
                 <legend>Rules for the new review</legend>
                 <label className="check">
@@ -215,7 +223,12 @@ export default function ReviewDetail({
                 </label>
                 {rerunMode === 'CURRENT' && (
                   <label>
-                    Rule set
+                    <span>
+                      Rule set{' '}
+                      <span className="required-mark" aria-hidden="true">
+                        *
+                      </span>
+                    </span>
                     <select
                       value={rerunRuleSetId}
                       onChange={e => setRerunRuleSetId(e.target.value)}

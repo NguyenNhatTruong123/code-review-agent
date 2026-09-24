@@ -75,9 +75,20 @@ export default function RuleManager({ rules, reload }) {
         </p>
         <ErrorNotice message={error} clear={() => setError('')} />
         <form onSubmit={save} className="form-stack">
+          <p className="required-note">
+            <span className="required-mark" aria-hidden="true">
+              *
+            </span>{' '}
+            Fields marked with an asterisk are required.
+          </p>
           <div className="grid-two">
             <label>
-              Name
+              <span>
+                Name{' '}
+                <span className="required-mark" aria-hidden="true">
+                  *
+                </span>
+              </span>
               <input
                 value={form.name}
                 onChange={e => setForm({ ...form, name: e.target.value })}
@@ -114,7 +125,11 @@ export default function RuleManager({ rules, reload }) {
             </label>
             <label>
               <span>
-                Languages <span className="optional">(comma separated or ALL)</span>
+                Languages{' '}
+                <span className="required-mark" aria-hidden="true">
+                  *
+                </span>{' '}
+                <span className="optional">(comma separated or ALL)</span>
               </span>
               <input
                 value={form.languages}
@@ -125,7 +140,12 @@ export default function RuleManager({ rules, reload }) {
           </div>
           <div className="instruction-field">
             <label>
-              Instruction
+              <span>
+                Instruction{' '}
+                <span className="required-mark" aria-hidden="true">
+                  *
+                </span>
+              </span>
               <textarea
                 value={form.instruction}
                 onChange={e => setForm({ ...form, instruction: e.target.value })}

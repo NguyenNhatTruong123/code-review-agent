@@ -107,10 +107,21 @@ export default function ReviewForm({ sets, onCreated }) {
       </div>
       <ErrorNotice message={error} clear={() => setError('')} />
       <form onSubmit={submit} className="form-stack">
+        <p className="required-note">
+          <span className="required-mark" aria-hidden="true">
+            *
+          </span>{' '}
+          Fields marked with an asterisk are required.
+        </p>
         {source === 'repository' ? (
           <>
             <label>
-              Public repository URL
+              <span>
+                Public repository URL{' '}
+                <span className="required-mark" aria-hidden="true">
+                  *
+                </span>
+              </span>
               <input
                 type="url"
                 placeholder="https://github.com/owner/repo"
@@ -156,7 +167,12 @@ export default function ReviewForm({ sets, onCreated }) {
               </select>
               {refChoice === 'manual' && (
                 <label>
-                  Custom branch, tag, or commit
+                  <span>
+                    Custom branch, tag, or commit{' '}
+                    <span className="required-mark" aria-hidden="true">
+                      *
+                    </span>
+                  </span>
                   <input
                     value={manualRef}
                     onChange={e => setManualRef(e.target.value)}
@@ -196,7 +212,12 @@ export default function ReviewForm({ sets, onCreated }) {
         ) : (
           <>
             <label>
-              Code
+              <span>
+                Code{' '}
+                <span className="required-mark" aria-hidden="true">
+                  *
+                </span>
+              </span>
               <textarea
                 className="code-input"
                 value={code}
@@ -210,17 +231,36 @@ export default function ReviewForm({ sets, onCreated }) {
             <div className="grid-two">
               <label>
                 <span>
-                  File name <span className="optional">(optional)</span>
+                  File name
+                  {!language && (
+                    <span className="required-mark" aria-hidden="true">
+                      {' '}*
+                    </span>
+                  )}{' '}
+                  <span className="optional">(required when no language is selected)</span>
                 </span>
                 <input
                   value={fileName}
                   onChange={e => setFileName(e.target.value)}
                   placeholder="Example.java"
+                  aria-required={!language}
                 />
               </label>
               <label>
-                Language
-                <select value={language} onChange={e => setLanguage(e.target.value)}>
+                <span>
+                  Language
+                  {!fileName && (
+                    <span className="required-mark" aria-hidden="true">
+                      {' '}*
+                    </span>
+                  )}{' '}
+                  <span className="optional">(required when no file name is provided)</span>
+                </span>
+                <select
+                  value={language}
+                  onChange={e => setLanguage(e.target.value)}
+                  aria-required={!fileName}
+                >
                   <option value="">Detect from file name</option>
                   {SOURCE_LANGUAGES.map(item => (
                     <option key={item}>{item}</option>
@@ -231,7 +271,12 @@ export default function ReviewForm({ sets, onCreated }) {
           </>
         )}
         <label>
-          Rule set
+          <span>
+            Rule set{' '}
+            <span className="required-mark" aria-hidden="true">
+              *
+            </span>
+          </span>
           <select value={ruleSetId} onChange={e => setRuleSetId(e.target.value)} required>
             <option value="">Select a rule set</option>
             {enabledSets.map(set => (

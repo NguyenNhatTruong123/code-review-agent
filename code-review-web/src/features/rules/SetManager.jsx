@@ -40,8 +40,19 @@ export default function SetManager({ sets, rules, reload }) {
         <h2>{editing ? 'Edit rule set' : 'Create rule set'}</h2>
         <ErrorNotice message={error} clear={() => setError('')} />
         <form onSubmit={save} className="form-stack">
+          <p className="required-note">
+            <span className="required-mark" aria-hidden="true">
+              *
+            </span>{' '}
+            Fields marked with an asterisk are required.
+          </p>
           <label>
-            Name
+            <span>
+              Name{' '}
+              <span className="required-mark" aria-hidden="true">
+                *
+              </span>
+            </span>
             <input
               value={form.name}
               onChange={e => setForm({ ...form, name: e.target.value })}
@@ -56,8 +67,16 @@ export default function SetManager({ sets, rules, reload }) {
               onChange={e => setForm({ ...form, description: e.target.value })}
             />
           </label>
-          <fieldset>
-            <legend>Rules</legend>
+          <fieldset aria-required="true" aria-describedby="rule-set-rules-help">
+            <legend>
+              Rules{' '}
+              <span className="required-mark" aria-hidden="true">
+                *
+              </span>
+            </legend>
+            <p id="rule-set-rules-help" className="hint">
+              Select at least one rule.
+            </p>
             {rules.length === 0 && <p>Create a rule first.</p>}
             {rules.map(rule => (
               <label className="check" key={rule.id}>

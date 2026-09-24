@@ -34,8 +34,23 @@ export default function Auth({ onLogin }) {
       <form className="card auth-card" onSubmit={submit}>
         <h2>{mode === 'login' ? 'Sign in' : 'Create account'}</h2>
         <ErrorNotice message={error} clear={() => setError('')} />
+        {mode === 'register' && (
+          <p className="required-note">
+            <span className="required-mark" aria-hidden="true">
+              *
+            </span>{' '}
+            Fields marked with an asterisk are required.
+          </p>
+        )}
         <label>
-          Username
+          <span>
+            Username
+            {mode === 'register' && (
+              <span className="required-mark" aria-hidden="true">
+                {' '}*
+              </span>
+            )}
+          </span>
           <input
             value={username}
             onChange={e => setUsername(e.target.value)}
@@ -46,7 +61,14 @@ export default function Auth({ onLogin }) {
           />
         </label>
         <label>
-          Password
+          <span>
+            Password
+            {mode === 'register' && (
+              <span className="required-mark" aria-hidden="true">
+                {' '}*
+              </span>
+            )}
+          </span>
           <input
             type="password"
             value={password}
