@@ -87,3 +87,11 @@ The backend must register one shared AI provider service during application star
 All frontend `.js` and `.jsx` source, test, and configuration files under `code-review-web` must use Prettier as the single source of truth, with the committed settings `printWidth: 100`, `tabWidth: 2`, `useTabs: false`, `singleQuote: true`, `semi: true`, `trailingComma: es5`, `bracketSpacing: true`, `arrowParens: avoid`, and `endOfLine: lf`.
 
 Formatting must use two-space indentation, one statement per line, readable wrapping for long JavaScript expressions and JSX props, and clear JSX nesting without changing semantic HTML, accessibility attributes, API contracts, application logic, routing, state behavior, or UI flow. Generated files, dependencies, coverage output, and build artifacts must remain unformatted, and the frontend must provide `npm run format` and `npm run format:check` scripts. The format check must be runnable as part of the standard frontend verification workflow, and no secrets, tokens, internal prompts, or sensitive data may be introduced.
+
+
+### 15. AI review provenance and in-progress findings
+Review details must refresh findings while a review is running so users can see findings as individual source files complete. The interface must clearly distinguish AI-generated findings from deterministic literal-match findings and display the count of files that received a successful AI provider response. A successful AI response that contains no supported violations must remain distinguishable from an unavailable or failed AI evaluation.
+
+
+### 16. Rule selection for reviews
+When creating a review, users must be able to select exactly one enabled rule set or choose one or more enabled rules directly from their own rule list. The selected rules must be captured as an immutable review snapshot, and ownership, enabled status, duplicate IDs, and empty selections must be validated by the API.
