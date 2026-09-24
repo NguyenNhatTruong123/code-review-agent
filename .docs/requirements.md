@@ -62,3 +62,9 @@ Users must be able to start a new review from an existing repository or pasted-c
 Single-line text inputs, select controls, and equivalent pickers must use the same height across authentication, review, rule, rule-set, and filter forms. Textareas, checkboxes, and radio controls retain dimensions appropriate to their interactions.
 
 Field labels and their supporting text must not cause neighboring form controls to become vertically misaligned.
+
+
+### 9. Consistent frontend JavaScript and JSX formatting
+All frontend `.js` and `.jsx` source, test, and configuration files under `code-review-web` must use Prettier as the single source of truth, with the committed settings `printWidth: 100`, `tabWidth: 2`, `useTabs: false`, `singleQuote: true`, `semi: true`, `trailingComma: es5`, `bracketSpacing: true`, `arrowParens: avoid`, and `endOfLine: lf`.
+
+Formatting must use two-space indentation, one statement per line, readable wrapping for long JavaScript expressions and JSX props, and clear JSX nesting without changing semantic HTML, accessibility attributes, API contracts, application logic, routing, state behavior, or UI flow. Generated files, dependencies, coverage output, and build artifacts must remain unformatted, and the frontend must provide `npm run format` and `npm run format:check` scripts. The format check must be runnable as part of the standard frontend verification workflow, and no secrets, tokens, internal prompts, or sensitive data may be introduced.
