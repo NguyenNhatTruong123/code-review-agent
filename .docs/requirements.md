@@ -44,3 +44,15 @@ Users must be able to delete a review they own from Recent reviews through a cle
 - A successful deletion removes the review, findings, and stored feedback together without orphaned data.
 - The review list, count, pagination, and any selected review detail update without a browser reload after deletion.
 - Failed delete requests must leave the review visible and show an actionable error.
+
+
+### 7. Rerun existing reviews
+Users must be able to start a new review from an existing repository or pasted-code review without re-entering its source.
+
+- Users can choose the exact rule snapshot stored with the original review, even if its rules or rule set have changed or been deleted.
+- Users can instead select an enabled rule set they own; the new review uses a fresh snapshot of that set.
+- The rerun flow shows the pinned repository commit/ref or pasted file that will be reviewed before submission.
+- Each rerun creates an independent review with a new ID, status, timestamps, findings, and rule snapshot; the original review remains unchanged.
+- The API must enforce ownership and return actionable errors when source data, the original snapshot, or a selected rule set is unavailable.
+- Review history groups an original review with its reruns, which users can expand and distinguish by their rerun titles and timestamps.
+- Selecting an original review group with reruns expands or collapses its rerun list, while a separate action opens the original review details.
