@@ -33,3 +33,14 @@ The branch selector must match the width, height, typography, spacing, and inter
 - Users can manually enter a valid branch, tag, or commit ref.
 - Long branch names remain readable, and the control has an accessible label and supports keyboard navigation.
 - Loading, empty branch lists, and repository inspection errors have clear states without preventing the user from using the default branch or entering a ref manually.
+
+
+### 6. Delete reviews from Recent reviews
+Users must be able to delete a review they own from Recent reviews through a clearly labeled action that is separate from opening the review.
+
+- Deletion requires confirmation that identifies the review and explains that its findings and feedback are removed with it.
+- The API must enforce review ownership and return the same not-found behavior for missing and foreign reviews.
+- Queued and running reviews must not be deleted; users must cancel the review before deletion.
+- A successful deletion removes the review, findings, and stored feedback together without orphaned data.
+- The review list, count, pagination, and any selected review detail update without a browser reload after deletion.
+- Failed delete requests must leave the review visible and show an actionable error.

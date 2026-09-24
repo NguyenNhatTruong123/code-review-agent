@@ -1,0 +1,3 @@
+Thực hiện chỉnh sửa issue thứ <issue-number>, với các thông tin như trong ảnh.
+Yêu cầu: Đọc kĩ thông tin trong ảnh, hiểu context và thực hiện. KHÔNG BUILD CODE, KHÔNG RUN TEST. 
+Done criteria: Code sau chỉnh sửa vẫn hoạt động bình thường, không thay đổi bất kì logic sẵn có, cập nhật issue vào .docs/requirements.md (chỉ cập nhật khái quát issue là gì).
