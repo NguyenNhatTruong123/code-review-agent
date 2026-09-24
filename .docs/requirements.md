@@ -23,3 +23,13 @@ All `.java` files in every module, including test sources, must use readable and
 ### 4. Reasearch using Github and OpenAI key.
 Code using GITHUB_TOKEN and OPENAI_API_KEY to connect source code with model and AI feature.
 Research API key can create and using normal or not.
+
+
+### 5. Branch selector in New review
+The branch selector must match the width, height, typography, spacing, and interaction style of other dropdowns in the interface on desktop and mobile.
+
+- After a public repository is inspected, users can select from its available branches.
+- The default branch is clearly identified and is used when the user does not select another ref.
+- Users can manually enter a valid branch, tag, or commit ref.
+- Long branch names remain readable, and the control has an accessible label and supports keyboard navigation.
+- Loading, empty branch lists, and repository inspection errors have clear states without preventing the user from using the default branch or entering a ref manually.
