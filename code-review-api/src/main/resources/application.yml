@@ -1,2 +1,26 @@
 server:
   port: 8080
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${SESSION_COOKIE_SECURE:false}
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:h2:file:./code-review-data;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${DB_USER:sa}
+    password: ${DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+app:
+  github-token: ${GITHUB_TOKEN:}
+  openai-key: ${OPENAI_API_KEY:}
+  openai-model: ${OPENAI_MODEL:gpt-4o-mini}
+  max-paste-chars: 100000
+  max-archive-bytes: 20000000
+  max-files: 300
+  max-file-bytes: 200000
+  max-total-source-bytes: 5000000

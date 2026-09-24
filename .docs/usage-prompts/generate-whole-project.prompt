@@ -1,0 +1,5 @@
+Bạn là một senior fullstack Java/ReactJs developer. 
+Context: Tôi muốn thực hiện tạo những file code cho project agent review code.
+Task: Hãy đọc hiểu các file rules bên trong thư mục .docs, cùng với đó là đọc, hiểu file BRD, sau đó thực hiện tạo source code cả FE và BE cho project.
+Done Criteria: Sau khi tạo code xong, project phải chạy được bình thường với một github repo code bất kỳ. Có unit test với Coverage C0 phải đạt ít nhất 80%.
+[IMPORTANT]: Để tránh trường hợp phí phạm token, bạn chỉ việc tạo code, việc build để kiểm chứng code, hoặc chạy các file tests, tôi sẽ tự chạy.
