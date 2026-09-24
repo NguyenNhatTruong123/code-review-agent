@@ -3,10 +3,32 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import App from './App.jsx';
 
 const starterSet = { id: 'set-1', name: 'Starter rules', ruleIds: ['rule-1'], enabled: true };
-const starterRule = { id: 'rule-1', name: 'TODO marker', severity: 'INFO', languages: 'ALL', instruction: 'Flag TODO', matchText: 'TODO', suggestedFix: 'Fix it', enabled: true, version: 1 };
-const review = { id: 'review-1', inputType: 'PASTE', fileName: 'X.java', ruleSetName: 'Starter rules', status: 'COMPLETED', createdAt: '2026-01-01T00:00:00Z', scannedFiles: 1, skippedFiles: 0, summary: { INFO: 1 } };
+const starterRule = {
+  id: 'rule-1',
+  name: 'TODO marker',
+  severity: 'INFO',
+  languages: 'ALL',
+  instruction: 'Flag TODO',
+  matchText: 'TODO',
+  suggestedFix: 'Fix it',
+  enabled: true,
+  version: 1,
+};
+const review = {
+  id: 'review-1',
+  inputType: 'PASTE',
+  fileName: 'X.java',
+  ruleSetName: 'Starter rules',
+  status: 'COMPLETED',
+  createdAt: '2026-01-01T00:00:00Z',
+  scannedFiles: 1,
+  skippedFiles: 0,
+  summary: { INFO: 1 },
+};
 
-function response(data, status = 200) { return { ok: status < 400, status, json: async () => data }; }
+function response(data, status = 200) {
+  return { ok: status < 400, status, json: async () => data };
+}
 function mockApi(custom = {}) {
   const calls = [];
   const fetchMock = vi.fn(async (url, options = {}) => {
@@ -16,23 +38,32 @@ function mockApi(custom = {}) {
     if (url.endsWith('/auth/me')) return response({ username: 'alice' });
     if (url.endsWith('/rules')) return response([starterRule]);
     if (url.endsWith('/rule-sets')) return response([starterSet]);
-    if (url.endsWith('/reviews?page=0&size=50')) return response({ items: [review], total: 1, page: 0, size: 50 });
+    if (url.endsWith('/reviews?page=0&size=50'))
+      return response({ items: [review], total: 1, page: 0, size: 50 });
     if (url.includes('/findings')) return response({ items: [], total: 0, page: 0, size: 50 });
-    if (url.endsWith('/reviews/repository') || url.endsWith('/reviews/paste')) return response(review, 202);
+    if (url.endsWith('/reviews/repository') || url.endsWith('/reviews/paste'))
+      return response(review, 202);
     return response({}, 200);
   });
   vi.stubGlobal('fetch', fetchMock);
   return calls;
 }
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 it('shows sign-in when there is no session and registers before logging in', async () => {
   let authenticated = false;
   const calls = mockApi({
-    '/api/v1/auth/me': () => authenticated ? response({ username: 'alice' }) : response({ message: 'Unauthorized' }, 401),
+    '/api/v1/auth/me': () =>
+      authenticated ? response({ username: 'alice' }) : response({ message: 'Unauthorized' }, 401),
     '/api/v1/auth/register': () => response({ username: 'alice' }, 201),
-    '/api/v1/auth/login': () => { authenticated = true; return response({ username: 'alice' }); },
+    '/api/v1/auth/login': () => {
+      authenticated = true;
+      return response({ username: 'alice' });
+    },
   });
   render(<App />);
   await screen.findByRole('heading', { name: 'Sign in' });
@@ -47,11 +78,18 @@ it('shows sign-in when there is no session and registers before logging in', asy
 
 it('inspects a GitHub repository and submits a review', async () => {
   const calls = mockApi({
-    '/api/v1/github/inspect?url=https%3A%2F%2Fgithub.com%2Facme%2Fsample': () => response({ repositoryUrl: 'https://github.com/acme/sample', defaultBranch: 'main', branches: ['main'] }),
+    '/api/v1/github/inspect?url=https%3A%2F%2Fgithub.com%2Facme%2Fsample': () =>
+      response({
+        repositoryUrl: 'https://github.com/acme/sample',
+        defaultBranch: 'main',
+        branches: ['main'],
+      }),
   });
   render(<App />);
   await screen.findByRole('heading', { level: 1, name: 'New review' });
-  fireEvent.change(screen.getByLabelText('Public repository URL'), { target: { value: 'https://github.com/acme/sample' } });
+  fireEvent.change(screen.getByLabelText('Public repository URL'), {
+    target: { value: 'https://github.com/acme/sample' },
+  });
   fireEvent.click(screen.getByRole('button', { name: 'Inspect repository' }));
   await screen.findByText('Default branch: main');
   fireEvent.change(screen.getByLabelText('Rule set'), { target: { value: 'set-1' } });
@@ -61,8 +99,24 @@ it('inspects a GitHub repository and submits a review', async () => {
 });
 
 it('submits pasted code and opens a saved finding', async () => {
-  const finding = { id: 'finding-1', ruleId: 'rule-1', ruleVersion: 1, severity: 'INFO', title: 'TODO marker', explanation: 'Unfinished', evidence: 'TODO', suggestedFix: 'Fix it', filePath: 'X.java', lineStart: 1, lineEnd: 1, source: 'STATIC' };
-  const calls = mockApi({ '/api/v1/reviews/review-1/findings?page=0&size=50': () => response({ items: [finding], total: 1, page: 0, size: 50 }) });
+  const finding = {
+    id: 'finding-1',
+    ruleId: 'rule-1',
+    ruleVersion: 1,
+    severity: 'INFO',
+    title: 'TODO marker',
+    explanation: 'Unfinished',
+    evidence: 'TODO',
+    suggestedFix: 'Fix it',
+    filePath: 'X.java',
+    lineStart: 1,
+    lineEnd: 1,
+    source: 'STATIC',
+  };
+  const calls = mockApi({
+    '/api/v1/reviews/review-1/findings?page=0&size=50': () =>
+      response({ items: [finding], total: 1, page: 0, size: 50 }),
+  });
   render(<App />);
   await screen.findByRole('heading', { level: 1, name: 'New review' });
   fireEvent.click(screen.getByRole('button', { name: 'Paste code' }));
@@ -90,21 +144,35 @@ it('creates a literal rule and a rule set', async () => {
   await screen.findByRole('heading', { level: 1, name: 'New review' });
   fireEvent.click(screen.getByRole('button', { name: 'Rules' }));
   fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'No debug' } });
-  fireEvent.change(screen.getByLabelText('Instruction'), { target: { value: 'Flag debug output' } });
+  fireEvent.change(screen.getByLabelText('Instruction'), {
+    target: { value: 'Flag debug output' },
+  });
   fireEvent.change(screen.getByLabelText(/Literal match/), { target: { value: 'console.log(' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create rule' }));
-  await waitFor(() => expect(calls.some(([url, options]) => url.endsWith('/rules') && options.method === 'POST')).toBe(true));
+  await waitFor(() =>
+    expect(
+      calls.some(([url, options]) => url.endsWith('/rules') && options.method === 'POST')
+    ).toBe(true)
+  );
   fireEvent.click(screen.getByRole('button', { name: 'Rule sets' }));
   fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Custom set' } });
   fireEvent.click(screen.getByLabelText(/TODO marker/));
   fireEvent.click(screen.getByRole('button', { name: 'Create rule set' }));
-  await waitFor(() => expect(calls.some(([url, options]) => url.endsWith('/rule-sets') && options.method === 'POST')).toBe(true));
+  await waitFor(() =>
+    expect(
+      calls.some(([url, options]) => url.endsWith('/rule-sets') && options.method === 'POST')
+    ).toBe(true)
+  );
 });
 
 it('edits and deletes an existing rule', async () => {
   vi.spyOn(window, 'confirm').mockReturnValue(true);
   const calls = mockApi({
-    '/api/v1/rules/rule-1': options => response(options.method === 'DELETE' ? null : starterRule, options.method === 'DELETE' ? 204 : 200),
+    '/api/v1/rules/rule-1': options =>
+      response(
+        options.method === 'DELETE' ? null : starterRule,
+        options.method === 'DELETE' ? 204 : 200
+      ),
   });
   render(<App />);
   await screen.findByRole('heading', { level: 1, name: 'New review' });
@@ -112,16 +180,28 @@ it('edits and deletes an existing rule', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
   fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Updated rule' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save rule' }));
-  await waitFor(() => expect(calls.some(([url, options]) => url.endsWith('/rules/rule-1') && options.method === 'PUT')).toBe(true));
+  await waitFor(() =>
+    expect(
+      calls.some(([url, options]) => url.endsWith('/rules/rule-1') && options.method === 'PUT')
+    ).toBe(true)
+  );
   fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-  await waitFor(() => expect(calls.some(([url, options]) => url.endsWith('/rules/rule-1') && options.method === 'DELETE')).toBe(true));
+  await waitFor(() =>
+    expect(
+      calls.some(([url, options]) => url.endsWith('/rules/rule-1') && options.method === 'DELETE')
+    ).toBe(true)
+  );
   vi.restoreAllMocks();
 });
 
 it('edits and deletes an existing rule set', async () => {
   vi.spyOn(window, 'confirm').mockReturnValue(true);
   const calls = mockApi({
-    '/api/v1/rule-sets/set-1': options => response(options.method === 'DELETE' ? null : starterSet, options.method === 'DELETE' ? 204 : 200),
+    '/api/v1/rule-sets/set-1': options =>
+      response(
+        options.method === 'DELETE' ? null : starterSet,
+        options.method === 'DELETE' ? 204 : 200
+      ),
   });
   render(<App />);
   await screen.findByRole('heading', { level: 1, name: 'New review' });
@@ -129,18 +209,44 @@ it('edits and deletes an existing rule set', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
   fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Updated set' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save rule set' }));
-  await waitFor(() => expect(calls.some(([url, options]) => url.endsWith('/rule-sets/set-1') && options.method === 'PUT')).toBe(true));
+  await waitFor(() =>
+    expect(
+      calls.some(([url, options]) => url.endsWith('/rule-sets/set-1') && options.method === 'PUT')
+    ).toBe(true)
+  );
   fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-  await waitFor(() => expect(calls.some(([url, options]) => url.endsWith('/rule-sets/set-1') && options.method === 'DELETE')).toBe(true));
+  await waitFor(() =>
+    expect(
+      calls.some(
+        ([url, options]) => url.endsWith('/rule-sets/set-1') && options.method === 'DELETE'
+      )
+    ).toBe(true)
+  );
   vi.restoreAllMocks();
 });
 
 it('records finding feedback and filters findings', async () => {
-  const finding = { id: 'finding-1', ruleId: 'rule-1', ruleVersion: 1, severity: 'INFO', title: 'TODO marker', explanation: 'Unfinished', evidence: 'TODO', suggestedFix: 'Fix it', filePath: 'X.java', lineStart: 1, lineEnd: 1, source: 'STATIC' };
+  const finding = {
+    id: 'finding-1',
+    ruleId: 'rule-1',
+    ruleVersion: 1,
+    severity: 'INFO',
+    title: 'TODO marker',
+    explanation: 'Unfinished',
+    evidence: 'TODO',
+    suggestedFix: 'Fix it',
+    filePath: 'X.java',
+    lineStart: 1,
+    lineEnd: 1,
+    source: 'STATIC',
+  };
   const calls = mockApi({
-    '/api/v1/reviews/review-1/findings?page=0&size=50': () => response({ items: [finding], total: 1, page: 0, size: 50 }),
-    '/api/v1/reviews/review-1/findings?severity=INFO&page=0&size=50': () => response({ items: [finding], total: 1, page: 0, size: 50 }),
-    '/api/v1/reviews/review-1/findings/finding-1/feedback': () => response({ ...finding, feedback: 'HELPFUL' }),
+    '/api/v1/reviews/review-1/findings?page=0&size=50': () =>
+      response({ items: [finding], total: 1, page: 0, size: 50 }),
+    '/api/v1/reviews/review-1/findings?severity=INFO&page=0&size=50': () =>
+      response({ items: [finding], total: 1, page: 0, size: 50 }),
+    '/api/v1/reviews/review-1/findings/finding-1/feedback': () =>
+      response({ ...finding, feedback: 'HELPFUL' }),
   });
   render(<App />);
   await screen.findByRole('heading', { level: 1, name: 'New review' });

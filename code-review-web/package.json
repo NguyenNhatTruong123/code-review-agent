@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "format": "prettier --write \"src/**/*.{js,jsx}\" \"*.config.js\"",
+    "format:check": "prettier --check \"src/**/*.{js,jsx}\" \"*.config.js\""
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
@@ -20,6 +22,7 @@
     "vitest": "latest",
     "@vitest/coverage-v8": "latest",
     "jsdom": "latest",
-    "@testing-library/react": "latest"
+    "@testing-library/react": "latest",
+    "prettier": "latest"
   }
 }

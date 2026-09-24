@@ -12,7 +12,9 @@ export async function api(path, { method = 'GET', body } = {}) {
   if (method !== 'GET') headers['X-XSRF-TOKEN'] = await csrfToken();
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const response = await fetch(`${BASE}${path}`, {
-    method, headers, credentials: 'same-origin',
+    method,
+    headers,
+    credentials: 'same-origin',
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (response.status === 204) return null;
