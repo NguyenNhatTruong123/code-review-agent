@@ -26,18 +26,31 @@ Read `.docs/api-spec.md`, `.docs/coding-rules.md`, and `.docs/security-rules.md`
 
 ## Configuration
 
-The API runs on port `8080` and uses a local H2 file database (`./code-review-data`) by default. It creates the database on first start. Set environment variables as needed:
+The API runs on port `8080` and uses a local H2 file database (`./code-review-data`) by default. It creates the database on first start. The AI integration uses Spring AI's OpenAI-compatible client to call the configured OpenRouter chat-completions endpoint. Set environment variables as needed:
 
 | Variable | Purpose |
 |---|---|
-| `OPENROUTER_API_KEY` | Enables semantic rules through OpenRouter. Omit it for deterministic rules only. |
-| `OPENROUTER_MODEL` | Optional OpenRouter model identifier. The application defaults to `openrouter/free`. |
-| `OPENROUTER_BASE_URL` | Optional full OpenRouter chat-completions URL. The default is `https://openrouter.ai/api/v1/chat/completions`. |
+| `OPENROUTER_API_KEY` | API key mapped to `spring.ai.openai.api-key`; enables semantic review and AI rule-instruction suggestions. Omit it for deterministic rules only. |
+| `OPENROUTER_MODEL` | Model mapped to `spring.ai.openai.chat.options.model`; defaults to `openrouter/free`. |
+| `OPENROUTER_BASE_URL` | OpenRouter chat-completions endpoint mapped to `spring.ai.openai.base-url`; defaults to `https://openrouter.ai/api/v1/chat/completions`. |
 | `GITHUB_TOKEN` | Optional token for higher GitHub API rate limits. Only public repositories are accepted. |
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | Override the H2 connection. |
 | `SESSION_COOKIE_SECURE` | Set to `true` when serving through HTTPS in a deployed environment. |
 
-Input limits are set in `code-review-api/src/main/resources/application.yml`. The API processes at most 300 supported source files, 200 KB per file, and 5 MB of source content by default. Oversized repositories fail with a visible error rather than producing an incomplete clean report.
+The corresponding Spring AI configuration is in `code-review-api/src/main/resources/application.yml`:
+
+```yaml
+spring:
+	ai:
+		openai:
+			base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1/chat/completions}
+			api-key: ${OPENROUTER_API_KEY:}
+			chat:
+				options:
+					model: ${OPENROUTER_MODEL:openrouter/free}
+```
+
+Input limits are also defined there: pasted source is limited to 100,000 characters, archives to 20 MB, supported source files to 300, each file to 200 KB, and total source content to 5 MB by default. Oversized repositories fail with a visible error rather than producing an incomplete clean report.
 
 Source code submitted for semantic review is sent to the configured AI provider. Do not enable semantic rules for code that your organization prohibits sending to that provider.
 
