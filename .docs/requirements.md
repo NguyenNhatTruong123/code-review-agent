@@ -67,10 +67,8 @@ Field labels and their supporting text must not cause neighboring form controls 
 Users can request an AI-generated draft instruction from a rule name and description while creating or editing a rule. The draft is reviewable and editable before the user explicitly applies it; manual instruction entry remains available when suggestions cannot be generated.
 
 
-### 10. Consistent frontend JavaScript and JSX formatting
-All frontend `.js` and `.jsx` source, test, and configuration files under `code-review-web` must use Prettier as the single source of truth, with the committed settings `printWidth: 100`, `tabWidth: 2`, `useTabs: false`, `singleQuote: true`, `semi: true`, `trailingComma: es5`, `bracketSpacing: true`, `arrowParens: avoid`, and `endOfLine: lf`.
-
-Formatting must use two-space indentation, one statement per line, readable wrapping for long JavaScript expressions and JSX props, and clear JSX nesting without changing semantic HTML, accessibility attributes, API contracts, application logic, routing, state behavior, or UI flow. Generated files, dependencies, coverage output, and build artifacts must remain unformatted, and the frontend must provide `npm run format` and `npm run format:check` scripts. The format check must be runnable as part of the standard frontend verification workflow, and no secrets, tokens, internal prompts, or sensitive data may be introduced.
+### 10. Required-field indicators on creation forms
+Account registration, review, rule, and rule-set creation forms must visibly mark every required field with a red asterisk, while optional fields remain unmarked. Indicators must reflect source-specific and conditional requirements, including the required rule selection for a rule set. Each form must explain the symbol and preserve accessible required semantics that match client and server validation.
 
 
 ### 11. AI-backed review execution
@@ -83,3 +81,9 @@ Code review and rule-instruction suggestions must use the configured OpenRouter-
 
 ### 13. AI provider service availability
 The backend must register one shared AI provider service during application startup so review execution and rule-instruction suggestions can both access the configured provider. Missing or invalid provider settings must result in a clear configuration error rather than a missing dependency error.
+
+
+### 14. Consistent frontend JavaScript and JSX formatting
+All frontend `.js` and `.jsx` source, test, and configuration files under `code-review-web` must use Prettier as the single source of truth, with the committed settings `printWidth: 100`, `tabWidth: 2`, `useTabs: false`, `singleQuote: true`, `semi: true`, `trailingComma: es5`, `bracketSpacing: true`, `arrowParens: avoid`, and `endOfLine: lf`.
+
+Formatting must use two-space indentation, one statement per line, readable wrapping for long JavaScript expressions and JSX props, and clear JSX nesting without changing semantic HTML, accessibility attributes, API contracts, application logic, routing, state behavior, or UI flow. Generated files, dependencies, coverage output, and build artifacts must remain unformatted, and the frontend must provide `npm run format` and `npm run format:check` scripts. The format check must be runnable as part of the standard frontend verification workflow, and no secrets, tokens, internal prompts, or sensitive data may be introduced.
