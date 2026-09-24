@@ -7,6 +7,9 @@ export default function RuleManager({ rules, reload }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_RULE);
   const [error, setError] = useState('');
+  const [suggestion, setSuggestion] = useState('');
+  const [suggestionError, setSuggestionError] = useState('');
+  const [suggesting, setSuggesting] = useState(false);
 
   async function save(event) {
     event.preventDefault();
@@ -18,6 +21,8 @@ export default function RuleManager({ rules, reload }) {
       });
       setEditing(null);
       setForm(EMPTY_RULE);
+      setSuggestion('');
+      setSuggestionError('');
       await reload();
     } catch (e) {
       setError(e.message);
@@ -32,6 +37,32 @@ export default function RuleManager({ rules, reload }) {
     } catch (e) {
       setError(e.message);
     }
+  }
+
+  async function suggestInstruction() {
+    setSuggestionError('');
+    if (!form.name.trim() || !form.description.trim()) {
+      setSuggestionError('Enter a rule name and description before requesting a suggestion.');
+      return;
+    }
+
+    setSuggesting(true);
+    try {
+      const result = await api('/rules/instruction-suggestions', {
+        method: 'POST',
+        body: { name: form.name, description: form.description },
+      });
+      setSuggestion(result.instruction);
+    } catch (e) {
+      setSuggestionError(e.message);
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  function acceptSuggestion() {
+    setForm(current => ({ ...current, instruction: suggestion }));
+    setSuggestion('');
   }
 
   // An empty literal match deliberately selects the semantic AI path on the server.
@@ -92,16 +123,53 @@ export default function RuleManager({ rules, reload }) {
               />
             </label>
           </div>
-          <label>
-            Instruction
-            <textarea
-              value={form.instruction}
-              onChange={e => setForm({ ...form, instruction: e.target.value })}
-              required
-              rows={3}
-              maxLength={4000}
-            />
-          </label>
+          <div className="instruction-field">
+            <label>
+              Instruction
+              <textarea
+                value={form.instruction}
+                onChange={e => setForm({ ...form, instruction: e.target.value })}
+                required
+                rows={3}
+                maxLength={4000}
+              />
+            </label>
+            <div className="inline">
+              <button type="button" onClick={suggestInstruction} disabled={suggesting}>
+                {suggesting ? 'Generating suggestion…' : 'Suggest with AI'}
+              </button>
+              <span className="hint">
+                Uses the rule name and description. You review the draft before using it.
+              </span>
+            </div>
+            <ErrorNotice message={suggestionError} clear={() => setSuggestionError('')} />
+            {suggestion && (
+              <section className="suggestion-panel" aria-label="AI instruction suggestion">
+                <h3>AI instruction suggestion</h3>
+                <p className="hint">
+                  Edit the draft if needed, then choose whether to use it in the Instruction field.
+                </p>
+                <textarea
+                  className="suggestion-draft"
+                  value={suggestion}
+                  onChange={e => setSuggestion(e.target.value)}
+                  rows={5}
+                  maxLength={4000}
+                />
+                <div className="inline">
+                  <button type="button" className="primary" onClick={acceptSuggestion}>
+                    Use this instruction
+                  </button>
+                  <button type="button" onClick={suggestInstruction} disabled={suggesting}>
+                    Try again
+                  </button>
+                  <button type="button" onClick={() => setSuggestion('')} disabled={suggesting}>
+                    Discard
+                  </button>
+                </div>
+              </section>
+            )}
+          </div>
           <label>
             <span>
               Literal match <span className="optional">(optional, case sensitive)</span>
@@ -135,6 +203,8 @@ export default function RuleManager({ rules, reload }) {
                 onClick={() => {
                   setEditing(null);
                   setForm(EMPTY_RULE);
+                  setSuggestion('');
+                  setSuggestionError('');
                 }}
               >
                 Cancel
@@ -170,6 +240,8 @@ export default function RuleManager({ rules, reload }) {
                     suggestedFix: rule.suggestedFix || '',
                     enabled: rule.enabled,
                   });
+                  setSuggestion('');
+                  setSuggestionError('');
                   window.scrollTo(0, 0);
                 }}
               >

@@ -123,6 +123,10 @@ export default function ReviewDetail({
             <b>Skipped files</b>
             <span>{review.skippedFiles}</span>
           </div>
+          <div>
+            <b>AI evaluated files</b>
+            <span>{review.aiEvaluatedFiles || 0}</span>
+          </div>
           {review.commitSha && (
             <div>
               <b>Commit</b>

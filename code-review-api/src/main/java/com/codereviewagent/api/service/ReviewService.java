@@ -77,6 +77,7 @@ public class ReviewService {
      * @param status processing status
      * @param scannedFiles number of processed files
      * @param skippedFiles number of skipped files
+     * @param aiEvaluatedFiles number of files with a successful AI provider response
      * @param warning non-fatal processing warning
      * @param error terminal error message
      * @param createdAt creation timestamp
@@ -98,6 +99,7 @@ public class ReviewService {
             String status,
             int scannedFiles,
             int skippedFiles,
+            int aiEvaluatedFiles,
             String warning,
             String error,
             Instant createdAt,
@@ -759,6 +761,7 @@ public class ReviewService {
                 r.status,
                 r.scannedFiles,
                 r.skippedFiles,
+                r.aiEvaluatedFiles,
                 r.warning,
                 r.error,
                 r.createdAt,

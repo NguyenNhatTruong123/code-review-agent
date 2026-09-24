@@ -56,6 +56,10 @@ textarea { resize: vertical; }
 .rerun-panel h3 { color: #1e3a8a; }
 .rerun-panel p { margin-bottom: 0; }
 .rerun-source { display: grid; gap: 4px; overflow-wrap: anywhere; font-size: .9rem; }
+.instruction-field { display: grid; gap: 10px; }
+.suggestion-panel { display: grid; gap: 12px; padding: 16px; border: 1px solid #bfdbfe; border-radius: 10px; background: #f8fbff; }
+.suggestion-panel h3, .suggestion-panel p { margin-bottom: 0; }
+.suggestion-draft { min-height: 140px; }
 .meta-grid { display: flex; gap: 30px; flex-wrap: wrap; margin-bottom: 18px; }
 .meta-grid div { display: grid; gap: 3px; }
 .meta-grid b { font-size: .8rem; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }

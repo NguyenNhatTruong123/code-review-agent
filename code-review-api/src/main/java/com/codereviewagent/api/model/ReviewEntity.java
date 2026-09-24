@@ -45,6 +45,9 @@ public class ReviewEntity {
     public int scannedFiles;
     public int skippedFiles;
 
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    public int aiEvaluatedFiles = 0;
+
     @Column(length = 2000)
     public String warning;
 

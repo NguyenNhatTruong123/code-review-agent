@@ -17,7 +17,12 @@ class AiReviewServiceTest {
     @Test
     void unavailableProviderCannotReviewSemanticRule() {
         var service =
-                new AiReviewService(new ObjectMapper(), HttpClient.newHttpClient(), "", "unused");
+                new AiReviewService(
+                        new ObjectMapper(),
+                        HttpClient.newHttpClient(),
+                        "https://openrouter.ai/api/v1",
+                        "",
+                        "unused");
         assertFalse(service.available());
         assertThrows(
                 IllegalStateException.class,
@@ -32,7 +37,12 @@ class AiReviewServiceTest {
     @Test
     void emptyRulesNeedNoProvider() throws Exception {
         var service =
-                new AiReviewService(new ObjectMapper(), HttpClient.newHttpClient(), "", "unused");
+                new AiReviewService(
+                        new ObjectMapper(),
+                        HttpClient.newHttpClient(),
+                        "https://openrouter.ai/api/v1",
+                        "",
+                        "unused");
         assertEquals(List.of(), service.review("x.java", "JAVA", "class X {}", List.of()));
     }
 
@@ -69,7 +79,13 @@ class AiReviewServiceTest {
                                         "choices",
                                         List.of(Map.of("message", Map.of("content", content))))));
         doAnswer(inv -> response).when(client).send(any(), any());
-        var service = new AiReviewService(mapper, client, "test-key", "test-model");
+        var service =
+                new AiReviewService(
+                        mapper,
+                        client,
+                        "https://openrouter.ai/api/v1",
+                        "test-key",
+                        "test-model");
         var results =
                 service.review(
                         "x.java",
@@ -87,7 +103,13 @@ class AiReviewServiceTest {
         HttpResponse<String> response = mock(HttpResponse.class);
         when(response.statusCode()).thenReturn(503);
         doAnswer(inv -> response).when(client).send(any(), any());
-        var service = new AiReviewService(new ObjectMapper(), client, "test-key", "test-model");
+        var service =
+                new AiReviewService(
+                        new ObjectMapper(),
+                        client,
+                        "https://openrouter.ai/api/v1",
+                        "test-key",
+                        "test-model");
         assertThrows(
                 java.io.IOException.class,
                 () ->
