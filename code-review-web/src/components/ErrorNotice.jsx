@@ -4,7 +4,9 @@ export default function ErrorNotice({ message, clear }) {
   return (
     <div className="notice error" role="alert">
       {message}
-      <button type="button" onClick={clear} aria-label="Dismiss error">×</button>
+      <button type="button" onClick={clear} aria-label="Dismiss error">
+        ×
+      </button>
     </div>
   );
 }

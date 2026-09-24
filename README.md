@@ -2,7 +2,7 @@
 
 A Java and React application for reviewing public GitHub repositories or pasted source code against user-selected coding rules. Reviews are tied to a Git commit and a snapshot of the rules used, so later rule changes do not alter prior results.
 
-The application includes deterministic literal-match rules that work without an AI key. Rules without a literal match use the OpenAI review adapter when configured. Each new account receives a starter rule set containing Java `System.out`, JavaScript `console.log`, and `TODO` checks.
+The application includes deterministic literal-match rules that work without an AI key. Rules without a literal match use the configured OpenRouter-compatible AI provider. Each new account receives a starter rule set containing Java `System.out`, JavaScript `console.log`, and `TODO` checks.
 
 ## Project Structure
 
@@ -26,17 +26,31 @@ Read `.docs/api-spec.md`, `.docs/coding-rules.md`, and `.docs/security-rules.md`
 
 ## Configuration
 
-The API runs on port `8080` and uses a local H2 file database (`./code-review-data`) by default. It creates the database on first start. Set environment variables as needed:
+The API runs on port `8080` and uses a local H2 file database (`./code-review-data`) by default. It creates the database on first start. The AI integration uses Spring AI's OpenAI-compatible client to call the configured OpenRouter chat-completions endpoint. Set environment variables as needed:
 
 | Variable | Purpose |
 |---|---|
-| `OPENAI_API_KEY` | Enables semantic rules. Omit it for deterministic rules only. |
-| `OPENAI_MODEL` | AI model name; defaults to `gpt-4o-mini`. |
+| `OPENROUTER_API_KEY` | API key mapped to `spring.ai.openai.api-key`; enables semantic review and AI rule-instruction suggestions. Omit it for deterministic rules only. |
+| `OPENROUTER_MODEL` | Model mapped to `spring.ai.openai.chat.options.model`; defaults to `openrouter/free`. |
+| `OPENROUTER_BASE_URL` | OpenRouter chat-completions endpoint mapped to `spring.ai.openai.base-url`; defaults to `https://openrouter.ai/api/v1/chat/completions`. |
 | `GITHUB_TOKEN` | Optional token for higher GitHub API rate limits. Only public repositories are accepted. |
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | Override the H2 connection. |
 | `SESSION_COOKIE_SECURE` | Set to `true` when serving through HTTPS in a deployed environment. |
 
-Input limits are set in `code-review-api/src/main/resources/application.yml`. The API processes at most 300 supported source files, 200 KB per file, and 5 MB of source content by default. Oversized repositories fail with a visible error rather than producing an incomplete clean report.
+The corresponding Spring AI configuration is in `code-review-api/src/main/resources/application.yml`:
+
+```yaml
+spring:
+	ai:
+		openai:
+			base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1/chat/completions}
+			api-key: ${OPENROUTER_API_KEY:}
+			chat:
+				options:
+					model: ${OPENROUTER_MODEL:openrouter/free}
+```
+
+Input limits are also defined there: pasted source is limited to 100,000 characters, archives to 20 MB, supported source files to 300, each file to 200 KB, and total source content to 5 MB by default. Oversized repositories fail with a visible error rather than producing an incomplete clean report.
 
 Source code submitted for semantic review is sent to the configured AI provider. Do not enable semantic rules for code that your organization prohibits sending to that provider.
 
@@ -59,7 +73,7 @@ npm run dev
 
 Open `http://localhost:8000`. Register an account with a password of at least 12 characters, then sign in. The frontend uses the Vite proxy to reach the API at `http://localhost:8080`.
 
-To review a public repository, enter a URL such as `https://github.com/owner/repo`, optionally select a branch or commit, choose a rule set, and start the review. The API resolves the ref to an immutable commit SHA before downloading the archive. Reviews run in the background; the detail page refreshes while processing. For pasted code, select the language explicitly or use a recognized file extension.
+To review a public repository, enter a URL such as `https://github.com/owner/repo`, optionally select a branch or commit, then choose either one enabled rule set or one or more enabled individual rules. The API records an immutable snapshot of the selected rules before downloading the archive, so later edits do not alter that review. Reviews run in the background and show findings as files complete. For pasted code, select the language explicitly or use a recognized file extension.
 
 ## API Overview
 
@@ -77,6 +91,10 @@ All application endpoints except registration, login, CSRF initialization, and h
 | `GET/POST/PUT/DELETE /api/v1/rules` and `/api/v1/rule-sets` | Manage personal rules and rule sets. |
 
 The client can send an optional `Idempotency-Key` header when creating a review to prevent duplicate submissions. A key reused with different input returns a conflict.
+
+Review creation requests must provide exactly one rule selection: `ruleSetId` for an enabled rule set, or `ruleIds` containing one or more enabled rules owned by the authenticated user. The selected rules are stored as the review snapshot; the API rejects rules owned by another user or disabled rules.
+
+When rerunning a review, users can reuse the original snapshot, choose an enabled current rule set, or select enabled individual rules. Each rerun stores its own immutable snapshot.
 
 ## Tests and Coverage
 

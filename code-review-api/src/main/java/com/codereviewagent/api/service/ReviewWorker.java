@@ -144,44 +144,38 @@ public class ReviewWorker {
             if (!literal.isEmpty()) {
                 evaluated = true;
             }
-            for (StaticReviewService.Match match : staticReview.review(file.code(), literal)) {
-                RuleSnapshot rule = findRule(applicable, match.ruleId());
-                saveFinding(
-                        id,
-                        file.path(),
-                        match.line(),
-                        match.line(),
-                        rule,
-                        rule.name(),
-                        rule.instruction(),
-                        match.evidence(),
-                        rule.suggestedFix(),
-                        "STATIC",
-                        dedupe);
-            }
-            List<RuleSnapshot> semantic =
-                    applicable.stream()
-                            .filter(rule -> rule.matchText() == null || rule.matchText().isBlank())
-                            .toList();
-            if (!semantic.isEmpty()) {
-                // Literal rules are deterministic; only rules without matchText are sent to the AI
-                // adapter.
+            List<RuleSnapshot> aiRules = applicable;
+            if (!aiRules.isEmpty()) {
+                // Static literal matches are supplemental. AI evaluates every selected applicable
+                // rule so a literal match does not disable semantic analysis for that rule.
                 if (!ai.available()) {
-                    warnings.add("AI unavailable: semantic rules skipped for " + file.path());
+                    warnings.add(
+                            "AI unavailable: configure OPENROUTER_API_KEY before starting the"
+                                    + " backend; AI review skipped for "
+                                    + file.path());
                 } else {
                     try {
                         List<AiReviewService.RuleSpec> specs =
-                                semantic.stream()
+                                aiRules.stream()
                                         .map(
                                                 rule ->
                                                         new AiReviewService.RuleSpec(
                                                                 rule.id(), rule.instruction()))
                                         .toList();
                         int lines = file.code().split("\n", -1).length;
-                        for (AiReviewService.Candidate candidate :
-                                ai.review(file.path(), file.language(), file.code(), specs)) {
+                        List<AiReviewService.Candidate> candidates =
+                                ai.review(file.path(), file.language(), file.code(), specs);
+                        review.aiEvaluatedFiles++;
+                        LOG.info(
+                                "AI review completed: review={} file={} provider={} model={} candidates={}",
+                                id,
+                                file.path(),
+                                ai.provider(),
+                                ai.model(),
+                                candidates.size());
+                        for (AiReviewService.Candidate candidate : candidates) {
                             RuleSnapshot rule =
-                                    semantic.stream()
+                                    aiRules.stream()
                                             .filter(r -> r.id().equals(candidate.ruleId()))
                                             .findFirst()
                                             .orElse(null);
@@ -207,13 +201,33 @@ public class ReviewWorker {
                         Thread.currentThread().interrupt();
                         throw e;
                     } catch (Exception e) {
-                        warnings.add("AI review failed for " + file.path());
+                        warnings.add("AI review failed for " + file.path() + ": " + aiFailure(e));
                         LOG.warn(
-                                "AI review failed for review {}: {}",
+                                "AI review failed: review={} file={} provider={} model={} reason={}",
                                 id,
-                                e.getClass().getSimpleName());
+                                file.path(),
+                                ai.provider(),
+                                ai.model(),
+                                aiFailureReason(e));
                     }
                 }
+            }
+            // Persist literal matches after AI candidates so equivalent evidence keeps the richer
+            // AI explanation while static matching remains a deterministic fallback.
+            for (StaticReviewService.Match match : staticReview.review(file.code(), literal)) {
+                RuleSnapshot rule = findRule(applicable, match.ruleId());
+                saveFinding(
+                        id,
+                        file.path(),
+                        match.line(),
+                        match.line(),
+                        rule,
+                        rule.name(),
+                        rule.instruction(),
+                        match.evidence(),
+                        rule.suggestedFix(),
+                        "STATIC",
+                        dedupe);
             }
             scanned++;
             review = reviews.findById(id).orElseThrow();
@@ -280,6 +294,22 @@ public class ReviewWorker {
     private static boolean looksSecret(String evidence) {
         return evidence.matches(
                 "(?is).*(api[_-]?key|secret|password|token)\\s*[:=]\\s*['\"]?[^\s'\"]{8,}.*");
+    }
+
+    private static String aiFailure(Exception exception) {
+        if (exception instanceof IOException
+                && exception.getMessage() != null
+                && exception.getMessage().matches("AI provider returned HTTP \\d{3}: .*")) {
+            return exception.getMessage().substring(0, "AI provider returned HTTP ".length() + 3);
+        }
+        return "provider request failed";
+    }
+
+    private static String aiFailureReason(Exception exception) {
+        if (exception instanceof IOException && exception.getMessage() != null) {
+            return exception.getMessage();
+        }
+        return exception.getClass().getSimpleName();
     }
 
     private void saveFinding(

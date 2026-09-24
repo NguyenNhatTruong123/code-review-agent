@@ -56,8 +56,10 @@ Tài liệu này quy định các yêu cầu cần tuân theo khi thiết kế, 
 
 ## 6. Quy ước các API nghiệp vụ
 
-- Tạo review repository phải lưu input URL đã chuẩn hóa, ref được yêu cầu, commit SHA thực tế, rule set snapshot, owner, trạng thái và thời điểm tạo.
-- Tạo review paste phải lưu metadata cần thiết, rule set snapshot và owner. Hạn chế lưu raw code theo retention policy.
+- Tạo review repository phải lưu input URL đã chuẩn hóa, ref được yêu cầu, commit SHA thực tế, snapshot của một rule set hoặc các rule được chọn trực tiếp, owner, trạng thái và thời điểm tạo.
+- Tạo review paste phải lưu metadata cần thiết, snapshot của một rule set hoặc các rule được chọn trực tiếp, và owner. Hạn chế lưu raw code theo retention policy.
+- Request tạo review phải có chính xác một trong hai lựa chọn: `ruleSetId` của rule set enabled thuộc owner, hoặc `ruleIds` gồm một hay nhiều rule enabled thuộc owner. Backend phải từ chối khi cả hai hoặc không lựa chọn nào được gửi.
+- Request rerun phải chọn snapshot gốc, một rule set enabled hiện tại, hoặc một hay nhiều rule enabled hiện tại thuộc owner. Lựa chọn hiện tại phải tạo snapshot mới cho rerun.
 - Review tạo xong trả ID và trạng thái ban đầu; client lấy tiến độ/kết quả qua endpoint đọc review.
 - Findings phải có rule ID/version thuộc snapshot review, severity hợp lệ, evidence, explanation và suggested fix. `filePath`, `lineStart`, `lineEnd` có thể rỗng nếu không xác định chắc chắn.
 - API không chấp nhận finding do client tự gửi để trở thành kết quả chính thức.
@@ -80,4 +82,14 @@ Tài liệu này quy định các yêu cầu cần tuân theo khi thiết kế, 
 - Khi có OpenAPI trong dự án, giữ schema đồng bộ với implementation; không tạo tài liệu mâu thuẫn với code.
 - Mọi endpoint cần có kiểm chứng cho validation, authorization, phản hồi thành công và lỗi chính. Kiểm thử không được dùng dữ liệu production hoặc credential thật.
 - Không trả dữ liệu nội bộ thừa; chỉ đưa ra field cần thiết cho chức năng gọi API.
+
+## 9. Rule instruction suggestion API
+
+### `POST /api/v1/rules/instruction-suggestions`
+
+- Yêu cầu người dùng đã xác thực và CSRF token hợp lệ.
+- Request JSON gồm `name` (1–120 ký tự) và `description` (1–2000 ký tự), đều bắt buộc.
+- Response `200 OK` có dạng `{ "instruction": "..." }`. Draft không được lưu và chỉ được áp dụng khi người dùng gửi rule create/update riêng.
+- Trả `400` khi thiếu hoặc vượt giới hạn input; `503` khi AI provider chưa cấu hình hoặc request bị ngắt; `504` khi timeout; và `502` khi upstream trả lỗi hoặc output không hợp lệ.
+- Credential AI chỉ được dùng tại backend. Rule name, description, và generated text được coi là input không đáng tin và không được log như nội dung đầy đủ.
 

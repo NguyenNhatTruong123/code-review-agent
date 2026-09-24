@@ -41,6 +41,8 @@ class ReviewWorkerTest {
                                                 "Use logger")));
         when(reviews.findById("review")).thenReturn(Optional.of(review));
         when(reviews.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(ai.available()).thenReturn(true);
+        when(ai.review(any(), any(), any(), any())).thenReturn(List.of());
         ReviewWorker worker =
                 new ReviewWorker(
                         reviews,
@@ -59,6 +61,7 @@ class ReviewWorkerTest {
                                         f.lineStart == 2
                                                 && f.ruleVersion == 2
                                                 && f.source.equals("STATIC")));
+        verify(ai).review(any(), any(), any(), any());
     }
 
     @Test

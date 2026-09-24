@@ -8,3 +8,5 @@ npm run dev
 ```
 
 Use `npm run build` for a production bundle, `npm test` for unit tests, and `npm run coverage` for a coverage report.
+
+Prettier is the source of truth for frontend JavaScript and JSX formatting. Run `npm run format` to format source, test, and Vite/Vitest configuration files, or run `npm run format:check` to validate formatting without changing files.

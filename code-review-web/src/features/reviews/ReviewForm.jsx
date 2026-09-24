@@ -1,62 +1,374 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api, query } from '../../api.js';
 import ErrorNotice from '../../components/ErrorNotice.jsx';
 import { SOURCE_LANGUAGES } from '../../constants.js';
 
-export default function ReviewForm({ sets, onCreated }) {
+export default function ReviewForm({ sets, rules = [], onCreated }) {
   const [source, setSource] = useState('repository');
   const [repositoryUrl, setRepositoryUrl] = useState('');
-  const [ref, setRef] = useState('');
+  const [refChoice, setRefChoice] = useState('');
+  const [manualRef, setManualRef] = useState('');
   const [repoInfo, setRepoInfo] = useState(null);
+  const [inspectStatus, setInspectStatus] = useState('idle');
+  const inspectRequest = useRef(0);
   const [code, setCode] = useState('');
   const [fileName, setFileName] = useState('');
   const [language, setLanguage] = useState('');
+  const [ruleSelection, setRuleSelection] = useState('set');
   const [ruleSetId, setRuleSetId] = useState('');
+  const [ruleIds, setRuleIds] = useState([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const enabledSets = sets.filter(set => set.enabled);
+  const enabledRules = rules.filter(rule => rule.enabled);
+  const branches = [...new Set(repoInfo?.branches ?? [])].filter(
+    branch => branch && branch !== repoInfo?.defaultBranch
+  );
+  const selectedBranch = refChoice.startsWith('branch:') ? refChoice.slice('branch:'.length) : null;
+  const inspecting = inspectStatus === 'loading';
+
+  function changeRepositoryUrl(value) {
+    // Invalidate an in-flight inspection so it cannot show branches from the previous URL.
+    inspectRequest.current += 1;
+    setRepositoryUrl(value);
+    setRepoInfo(null);
+    setRefChoice('');
+    setManualRef('');
+    setInspectStatus('idle');
+    setError('');
+  }
 
   async function inspect() {
-    // Inspect first to show the server-resolved branch list before submitting a review.
-    setError(''); setBusy(true); setRepoInfo(null);
-    try { setRepoInfo(await api(`/github/inspect?${query({ url: repositoryUrl })}`)); }
-    catch (e) { setError(e.message); }
-    finally { setBusy(false); }
+    const requestId = ++inspectRequest.current;
+    setError('');
+    setRepoInfo(null);
+    setRefChoice(current => (current.startsWith('branch:') ? '' : current));
+    setInspectStatus('loading');
+
+    try {
+      const result = await api(`/github/inspect?${query({ url: repositoryUrl })}`);
+      if (requestId !== inspectRequest.current) return;
+
+      setRepoInfo(result);
+      setInspectStatus('success');
+    } catch (e) {
+      if (requestId !== inspectRequest.current) return;
+
+      setError(e.message);
+      setInspectStatus('error');
+    }
   }
 
   async function submit(event) {
-    event.preventDefault(); setError(''); setBusy(true);
+    event.preventDefault();
+    setError('');
+    setBusy(true);
+
     try {
-      const result = source === 'repository'
-        ? await api('/reviews/repository', { method: 'POST', body: { repositoryUrl, ref, ruleSetId } })
-        : await api('/reviews/paste', { method: 'POST', body: { code, fileName, language, ruleSetId } });
+      const ref = refChoice === 'manual' ? manualRef.trim() : selectedBranch || '';
+      const selectedRules =
+        ruleSelection === 'set' ? { ruleSetId, ruleIds: null } : { ruleSetId: null, ruleIds };
+      const result =
+        source === 'repository'
+          ? await api('/reviews/repository', {
+              method: 'POST',
+              body: { repositoryUrl, ref, ...selectedRules },
+            })
+          : await api('/reviews/paste', {
+              method: 'POST',
+              body: { code, fileName, language, ...selectedRules },
+            });
       onCreated(result);
-    } catch (e) { setError(e.message); }
-    finally { setBusy(false); }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
-  return <section className="card">
-    <div className="section-heading"><div><h2>New review</h2><p>Select source code and the rules to apply.</p></div></div>
-    <div className="segmented" role="group" aria-label="Source type">
-      <button type="button" className={source === 'repository' ? 'selected' : ''} onClick={() => setSource('repository')}>GitHub repository</button>
-      <button type="button" className={source === 'paste' ? 'selected' : ''} onClick={() => setSource('paste')}>Paste code</button>
-    </div>
-    <ErrorNotice message={error} clear={() => setError('')} />
-    <form onSubmit={submit} className="form-stack">
-      {source === 'repository' ? <>
-        <label>Public repository URL<input type="url" placeholder="https://github.com/owner/repo" value={repositoryUrl} onChange={e => { setRepositoryUrl(e.target.value); setRepoInfo(null); }} required /></label>
-        <div className="inline"><button type="button" onClick={inspect} disabled={busy || !repositoryUrl}>Inspect repository</button>{repoInfo && <span className="muted">Default branch: {repoInfo.defaultBranch}</span>}</div>
-        <label>Branch or commit <span className="optional">(optional)</span><input value={ref} onChange={e => setRef(e.target.value)} placeholder={repoInfo?.defaultBranch || 'Uses default branch'} list="branches" /></label>
-        <datalist id="branches">{repoInfo?.branches?.map(branch => <option key={branch} value={branch} />)}</datalist>
-      </> : <>
-        <label>Code<textarea className="code-input" value={code} onChange={e => setCode(e.target.value)} required maxLength={100000} rows={12} placeholder="Paste source code here" /></label>
-        <div className="grid-two"><label>File name <span className="optional">(optional)</span><input value={fileName} onChange={e => setFileName(e.target.value)} placeholder="Example.java" /></label>
-          <label>Language<select value={language} onChange={e => setLanguage(e.target.value)}><option value="">Detect from file name</option>{SOURCE_LANGUAGES.map(item => <option key={item}>{item}</option>)}</select></label></div>
-      </>}
-      <label>Rule set<select value={ruleSetId} onChange={e => setRuleSetId(e.target.value)} required><option value="">Select a rule set</option>{enabledSets.map(set => <option key={set.id} value={set.id}>{set.name}</option>)}</select></label>
-      {enabledSets.length === 0 && <p className="muted">Create and enable a rule set before starting a review.</p>}
-      <p className="hint">Code is processed by the server. Rules without a literal match use the configured AI provider.</p>
-      <button className="primary" disabled={busy || !ruleSetId}>{busy ? 'Submitting…' : 'Start review'}</button>
-    </form>
-  </section>;
+  return (
+    <section className="card">
+      <div className="section-heading">
+        <div>
+          <h2>New review</h2>
+          <p>Select source code and the rules to apply.</p>
+        </div>
+      </div>
+      <div className="segmented" role="group" aria-label="Source type">
+        <button
+          type="button"
+          className={source === 'repository' ? 'selected' : ''}
+          onClick={() => setSource('repository')}
+        >
+          GitHub repository
+        </button>
+        <button
+          type="button"
+          className={source === 'paste' ? 'selected' : ''}
+          onClick={() => setSource('paste')}
+        >
+          Paste code
+        </button>
+      </div>
+      <ErrorNotice message={error} clear={() => setError('')} />
+      <form onSubmit={submit} className="form-stack">
+        <p className="required-note">
+          <span className="required-mark" aria-hidden="true">
+            *
+          </span>{' '}
+          Fields marked with an asterisk are required.
+        </p>
+        {source === 'repository' ? (
+          <>
+            <label>
+              <span>
+                Public repository URL{' '}
+                <span className="required-mark" aria-hidden="true">
+                  *
+                </span>
+              </span>
+              <input
+                type="url"
+                placeholder="https://github.com/owner/repo"
+                value={repositoryUrl}
+                onChange={e => changeRepositoryUrl(e.target.value)}
+                required
+              />
+            </label>
+            <div className="inline">
+              <button
+                type="button"
+                onClick={inspect}
+                disabled={busy || inspecting || !repositoryUrl}
+              >
+                {inspecting ? 'Inspecting…' : 'Inspect repository'}
+              </button>
+              {repoInfo && (
+                <span className="muted ref-name">Default branch: {repoInfo.defaultBranch}</span>
+              )}
+            </div>
+            <div className="ref-field">
+              <label htmlFor="review-ref">
+                <span>
+                  Branch, tag, or commit <span className="optional">(optional)</span>
+                </span>
+              </label>
+              <select
+                id="review-ref"
+                className="ref-select"
+                value={refChoice}
+                onChange={e => setRefChoice(e.target.value)}
+                aria-describedby="review-ref-help"
+              >
+                <option value="">
+                  Use default branch{repoInfo?.defaultBranch ? ` (${repoInfo.defaultBranch})` : ''}
+                </option>
+                {branches.map(branch => (
+                  <option key={branch} value={`branch:${branch}`}>
+                    {branch}
+                  </option>
+                ))}
+                <option value="manual">Enter another branch, tag, or commit…</option>
+              </select>
+              {refChoice === 'manual' && (
+                <label>
+                  <span>
+                    Custom branch, tag, or commit{' '}
+                    <span className="required-mark" aria-hidden="true">
+                      *
+                    </span>
+                  </span>
+                  <input
+                    value={manualRef}
+                    onChange={e => setManualRef(e.target.value)}
+                    maxLength={200}
+                    pattern="[A-Za-z0-9._/-]+"
+                    title="Use letters, numbers, periods, underscores, hyphens, or slashes"
+                    required
+                    placeholder="Branch, tag, or 40-character commit SHA"
+                  />
+                </label>
+              )}
+              <p id="review-ref-help" className="hint ref-help" role="status">
+                {inspecting && 'Loading branches…'}
+                {inspectStatus === 'idle' &&
+                  'Inspect the repository to list branches, or enter a ref manually.'}
+                {inspectStatus === 'error' &&
+                  'Repository inspection failed. Correct the URL and retry, or enter a ref manually.'}
+                {inspectStatus === 'success' &&
+                  branches.length === 0 &&
+                  'No additional branches were returned. You can use the default branch or enter a ref manually.'}
+                {inspectStatus === 'success' && branches.length > 0 && selectedBranch && (
+                  <>
+                    Selected branch: <span className="ref-name">{selectedBranch}</span>
+                  </>
+                )}
+                {inspectStatus === 'success' &&
+                  branches.length > 0 &&
+                  refChoice === 'manual' &&
+                  'Enter the branch, tag, or commit to review.'}
+                {inspectStatus === 'success' &&
+                  branches.length > 0 &&
+                  refChoice === '' &&
+                  'Choose a branch above, use the default branch, or enter another ref.'}
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            <label>
+              <span>
+                Code{' '}
+                <span className="required-mark" aria-hidden="true">
+                  *
+                </span>
+              </span>
+              <textarea
+                className="code-input"
+                value={code}
+                onChange={e => setCode(e.target.value)}
+                required
+                maxLength={100000}
+                rows={12}
+                placeholder="Paste source code here"
+              />
+            </label>
+            <div className="grid-two">
+              <label>
+                <span>
+                  File name
+                  {!language && (
+                    <span className="required-mark" aria-hidden="true">
+                      {' '}*
+                    </span>
+                  )}{' '}
+                  <span className="optional">(required when no language is selected)</span>
+                </span>
+                <input
+                  value={fileName}
+                  onChange={e => setFileName(e.target.value)}
+                  placeholder="Example.java"
+                  aria-required={!language}
+                />
+              </label>
+              <label>
+                <span>
+                  Language
+                  {!fileName && (
+                    <span className="required-mark" aria-hidden="true">
+                      {' '}*
+                    </span>
+                  )}{' '}
+                  <span className="optional">(required when no file name is provided)</span>
+                </span>
+                <select
+                  value={language}
+                  onChange={e => setLanguage(e.target.value)}
+                  aria-required={!fileName}
+                >
+                  <option value="">Detect from file name</option>
+                  {SOURCE_LANGUAGES.map(item => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </>
+        )}
+        <fieldset aria-required="true" aria-describedby="review-rule-selection-help">
+          <legend>
+            Rules to review{' '}
+            <span className="required-mark" aria-hidden="true">
+              *
+            </span>
+          </legend>
+          <p id="review-rule-selection-help" className="hint">
+            Choose one enabled rule set or select one or more enabled rules.
+          </p>
+          <label className="check">
+            <input
+              type="radio"
+              name="review-rule-selection"
+              value="set"
+              checked={ruleSelection === 'set'}
+              onChange={() => setRuleSelection('set')}
+            />
+            Use an enabled rule set
+          </label>
+          {ruleSelection === 'set' && (
+            <label>
+              Rule set
+              <select
+                value={ruleSetId}
+                onChange={e => setRuleSetId(e.target.value)}
+                required
+              >
+                <option value="">Select a rule set</option>
+                {enabledSets.map(set => (
+                  <option key={set.id} value={set.id}>
+                    {set.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {ruleSelection === 'set' && enabledSets.length === 0 && (
+            <p className="muted">Create and enable a rule set before starting a review.</p>
+          )}
+          <label className="check">
+            <input
+              type="radio"
+              name="review-rule-selection"
+              value="rules"
+              checked={ruleSelection === 'rules'}
+              onChange={() => setRuleSelection('rules')}
+            />
+            Choose individual rules
+          </label>
+          {ruleSelection === 'rules' && (
+            <div className="rule-choice-list" aria-label="Enabled rules">
+              {enabledRules.map(rule => (
+                <label className="check" key={rule.id}>
+                  <input
+                    type="checkbox"
+                    checked={ruleIds.includes(rule.id)}
+                    onChange={e =>
+                      setRuleIds(current =>
+                        e.target.checked
+                          ? [...current, rule.id]
+                          : current.filter(id => id !== rule.id)
+                      )
+                    }
+                  />
+                  <span>
+                    {rule.name}{' '}
+                    <span className="muted">
+                      ({rule.severity} · {rule.languages})
+                    </span>
+                  </span>
+                </label>
+              ))}
+              {enabledRules.length === 0 && (
+                <p className="muted">Create and enable a rule before starting a review.</p>
+              )}
+            </div>
+          )}
+        </fieldset>
+        <p className="hint">
+          Code is processed by the server. Rules without a literal match use the configured AI
+          provider.
+        </p>
+        <button
+          className="primary"
+          disabled={
+            busy ||
+            inspecting ||
+            (ruleSelection === 'set' ? !ruleSetId : ruleIds.length === 0)
+          }
+        >
+          {busy ? 'Submitting…' : 'Start review'}
+        </button>
+      </form>
+    </section>
+  );
 }

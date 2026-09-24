@@ -1,6 +1,9 @@
 package com.codereviewagent.api.controller;
 
 import com.codereviewagent.api.service.CurrentUser;
+import com.codereviewagent.api.service.RuleInstructionSuggestionService;
+import com.codereviewagent.api.service.RuleInstructionSuggestionService.SuggestionInput;
+import com.codereviewagent.api.service.RuleInstructionSuggestionService.SuggestionView;
 import com.codereviewagent.api.service.RuleService;
 import com.codereviewagent.api.service.RuleService.RuleInput;
 import com.codereviewagent.api.service.RuleService.RuleView;
@@ -18,16 +21,20 @@ import java.util.List;
 @RequestMapping("/api/v1")
 public class RuleController {
     private final RuleService rules;
+    private final RuleInstructionSuggestionService suggestions;
     private final CurrentUser current;
 
     /**
      * Creates the rule endpoint adapter.
      *
      * @param rules rule use-case service
+     * @param suggestions AI-backed rule-instruction suggestion service
      * @param current authenticated-user resolver
      */
-    public RuleController(RuleService rules, CurrentUser current) {
+    public RuleController(
+            RuleService rules, RuleInstructionSuggestionService suggestions, CurrentUser current) {
         this.rules = rules;
+        this.suggestions = suggestions;
         this.current = current;
     }
 
@@ -66,6 +73,19 @@ public class RuleController {
     @PutMapping("/rules/{id}")
     public RuleView updateRule(Principal p, @PathVariable String id, @RequestBody RuleInput body) {
         return rules.saveRule(current.id(p), id, body);
+    }
+
+    /**
+     * Generates an unpersisted instruction draft for an authenticated user's rule form.
+     *
+     * @param p authenticated principal
+     * @param body rule name and description for AI context
+     * @return user-reviewable instruction draft
+     */
+    @PostMapping("/rules/instruction-suggestions")
+    public SuggestionView suggestInstruction(Principal p, @RequestBody SuggestionInput body) {
+        current.id(p);
+        return suggestions.suggest(body);
     }
 
     /**

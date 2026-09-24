@@ -178,7 +178,7 @@ class ReviewServiceTest {
     @Test
     void listsOnlyOnePageOfCurrentUsersReviews() {
         ReviewEntity review = new ReviewEntity("review", "owner", "PASTE", "set");
-        when(reviews.findByOwnerId(eq("owner"), any(Pageable.class)))
+        when(reviews.findByOwnerIdAndParentReviewIdIsNull(eq("owner"), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(review)));
         var page = service.list("owner", 0, 50);
         assertEquals(1, page.total());

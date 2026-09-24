@@ -24,6 +24,10 @@ public class ReviewEntity {
     public String fileName;
     public String language;
 
+    @Lob public String pastedSource;
+
+    public String parentReviewId;
+
     @Column(name = "idempotency_key")
     public String idempotencyKey;
 
@@ -40,6 +44,9 @@ public class ReviewEntity {
 
     public int scannedFiles;
     public int skippedFiles;
+
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    public int aiEvaluatedFiles = 0;
 
     @Column(length = 2000)
     public String warning;

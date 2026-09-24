@@ -7,6 +7,7 @@ import com.codereviewagent.api.service.ReviewService.FindingPage;
 import com.codereviewagent.api.service.ReviewService.FindingView;
 import com.codereviewagent.api.service.ReviewService.PasteInput;
 import com.codereviewagent.api.service.ReviewService.RepositoryInput;
+import com.codereviewagent.api.service.ReviewService.RerunInput;
 import com.codereviewagent.api.service.ReviewService.ReviewPage;
 import com.codereviewagent.api.service.ReviewService.ReviewView;
 
@@ -14,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.List;
 import java.util.Map;
 
 /** Maps authenticated review creation, retrieval, cancellation, and feedback requests. */
@@ -80,7 +82,7 @@ public class ReviewController {
     }
 
     /**
-     * Lists only the authenticated user's reviews using bounded pagination.
+     * Lists only the authenticated user's original review groups using bounded pagination.
      *
      * @param p authenticated principal
      * @param page zero-based page number
@@ -108,6 +110,18 @@ public class ReviewController {
     }
 
     /**
+     * Lists the reruns belonging to an owner-scoped original review.
+     *
+     * @param p authenticated principal
+     * @param id original or rerun review identifier
+     * @return chronological reruns for the original review
+     */
+    @GetMapping("/reviews/{id}/reruns")
+    public List<ReviewView> reruns(Principal p, @PathVariable String id) {
+        return reviews.reruns(current.id(p), id);
+    }
+
+    /**
      * Cancels a queued or running owner-scoped review.
      *
      * @param p authenticated principal
@@ -117,6 +131,35 @@ public class ReviewController {
     @PostMapping("/reviews/{id}/cancel")
     public ReviewView cancel(Principal p, @PathVariable String id) {
         return reviews.cancel(current.id(p), id);
+    }
+
+    /**
+     * Queues a new review from an owned review's pinned source and selected rules.
+     *
+     * @param p authenticated principal
+     * @param id original review identifier
+     * @param body original-snapshot or current-rule-set selection
+     * @return newly queued review view
+     * @throws ResponseStatusException when the review, source, or selected rules are unavailable
+     */
+    @PostMapping("/reviews/{id}/rerun")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ReviewView rerun(Principal p, @PathVariable String id, @RequestBody RerunInput body) {
+        return reviews.rerun(current.id(p), id, body);
+    }
+
+    /**
+     * Deletes an owner-scoped terminal review and its stored findings and feedback.
+     *
+     * @param p authenticated principal
+     * @param id review identifier
+     * @throws ResponseStatusException with 404 for a missing or foreign review, or 409 while it is
+     *     queued or running
+     */
+    @DeleteMapping("/reviews/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(Principal p, @PathVariable String id) {
+        reviews.delete(current.id(p), id);
     }
 
     /**
