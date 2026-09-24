@@ -56,3 +56,9 @@ Users must be able to start a new review from an existing repository or pasted-c
 - The API must enforce ownership and return actionable errors when source data, the original snapshot, or a selected rule set is unavailable.
 - Review history groups an original review with its reruns, which users can expand and distinguish by their rerun titles and timestamps.
 - Selecting an original review group with reruns expands or collapses its rerun list, while a separate action opens the original review details.
+
+
+### 8. Consistent single-line form controls
+Single-line text inputs, select controls, and equivalent pickers must use the same height across authentication, review, rule, rule-set, and filter forms. Textareas, checkboxes, and radio controls retain dimensions appropriate to their interactions.
+
+Field labels and their supporting text must not cause neighboring form controls to become vertically misaligned.
