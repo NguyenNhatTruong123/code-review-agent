@@ -7,7 +7,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class CodeReviewApiApplication {
 
-    /** Starts the Spring Boot application with the supplied process arguments.
+    /**
+     * Starts the Spring Boot application with the supplied process arguments.
+     *
      * @param args process arguments forwarded to Spring Boot
      */
     public static void main(String[] args) {
