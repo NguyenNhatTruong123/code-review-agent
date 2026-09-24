@@ -18,3 +18,8 @@ All `.java` files in every module, including test sources, must use readable and
 - Follow the existing project's Java style and keep formatting consistent across modules.
 - Validate Java changes with the relevant Maven tests.
 - Do not add secrets, tokens, internal prompts, or sensitive data to source code or comments.
+
+
+### 4. Reasearch using Github and OpenAI key.
+Code using GITHUB_TOKEN and OPENAI_API_KEY to connect source code with model and AI feature.
+Research API key can create and using normal or not.
