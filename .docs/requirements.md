@@ -20,9 +20,8 @@ All `.java` files in every module, including test sources, must use readable and
 - Do not add secrets, tokens, internal prompts, or sensitive data to source code or comments.
 
 
-### 4. Reasearch using Github and OpenAI key.
-Code using GITHUB_TOKEN and OPENAI_API_KEY to connect source code with model and AI feature.
-Research API key can create and using normal or not.
+### 4. GitHub and AI provider credentials
+The application uses `GITHUB_TOKEN` and the configured AI provider credential to access source code and AI capabilities. Credentials are supplied through runtime environment configuration and are never exposed to the browser or committed to the repository.
 
 
 ### 5. Branch selector in New review
@@ -64,7 +63,23 @@ Single-line text inputs, select controls, and equivalent pickers must use the sa
 Field labels and their supporting text must not cause neighboring form controls to become vertically misaligned.
 
 
-### 9. Consistent frontend JavaScript and JSX formatting
+### 9. AI instruction suggestions for rules
+Users can request an AI-generated draft instruction from a rule name and description while creating or editing a rule. The draft is reviewable and editable before the user explicitly applies it; manual instruction entry remains available when suggestions cannot be generated.
+
+
+### 10. Consistent frontend JavaScript and JSX formatting
 All frontend `.js` and `.jsx` source, test, and configuration files under `code-review-web` must use Prettier as the single source of truth, with the committed settings `printWidth: 100`, `tabWidth: 2`, `useTabs: false`, `singleQuote: true`, `semi: true`, `trailingComma: es5`, `bracketSpacing: true`, `arrowParens: avoid`, and `endOfLine: lf`.
 
 Formatting must use two-space indentation, one statement per line, readable wrapping for long JavaScript expressions and JSX props, and clear JSX nesting without changing semantic HTML, accessibility attributes, API contracts, application logic, routing, state behavior, or UI flow. Generated files, dependencies, coverage output, and build artifacts must remain unformatted, and the frontend must provide `npm run format` and `npm run format:check` scripts. The format check must be runnable as part of the standard frontend verification workflow, and no secrets, tokens, internal prompts, or sensitive data may be introduced.
+
+
+### 11. AI-backed review execution
+When the AI provider is configured, every selected rule that applies to a source file must be evaluated by AI. AI-generated findings are retained as AI-sourced results for the UI. Literal matching remains a supplemental deterministic check; it must not prevent AI evaluation. If AI is unavailable, the review must state that AI evaluation was skipped while retaining any deterministic findings.
+
+
+### 12. OpenRouter AI review integration
+Code review and rule-instruction suggestions must use the configured OpenRouter-compatible AI provider and model through server-side requests. The default free-model configuration must select from currently available free provider endpoints. AI review output must be structured so it can be validated and displayed by the application. Review details must show how many files received a successful AI provider response, while unavailable or failed AI evaluation must produce a clear, actionable result.
+
+
+### 13. AI provider service availability
+The backend must register one shared AI provider service during application startup so review execution and rule-instruction suggestions can both access the configured provider. Missing or invalid provider settings must result in a clear configuration error rather than a missing dependency error.

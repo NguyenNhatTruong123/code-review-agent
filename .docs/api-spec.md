@@ -81,3 +81,13 @@ Tài liệu này quy định các yêu cầu cần tuân theo khi thiết kế, 
 - Mọi endpoint cần có kiểm chứng cho validation, authorization, phản hồi thành công và lỗi chính. Kiểm thử không được dùng dữ liệu production hoặc credential thật.
 - Không trả dữ liệu nội bộ thừa; chỉ đưa ra field cần thiết cho chức năng gọi API.
 
+## 9. Rule instruction suggestion API
+
+### `POST /api/v1/rules/instruction-suggestions`
+
+- Yêu cầu người dùng đã xác thực và CSRF token hợp lệ.
+- Request JSON gồm `name` (1–120 ký tự) và `description` (1–2000 ký tự), đều bắt buộc.
+- Response `200 OK` có dạng `{ "instruction": "..." }`. Draft không được lưu và chỉ được áp dụng khi người dùng gửi rule create/update riêng.
+- Trả `400` khi thiếu hoặc vượt giới hạn input; `503` khi AI provider chưa cấu hình hoặc request bị ngắt; `504` khi timeout; và `502` khi upstream trả lỗi hoặc output không hợp lệ.
+- Credential AI chỉ được dùng tại backend. Rule name, description, và generated text được coi là input không đáng tin và không được log như nội dung đầy đủ.
+
