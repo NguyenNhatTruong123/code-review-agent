@@ -3,7 +3,7 @@ import { api, query } from '../../api.js';
 import ErrorNotice from '../../components/ErrorNotice.jsx';
 import { PAGE_SIZE, REVIEW_STATUSES, SEVERITIES } from '../../constants.js';
 
-export default function ReviewDetail({ review, rules, onRefresh, onBack }) {
+export default function ReviewDetail({ review, rules, onRefresh, onDelete, onBack }) {
   const [findings, setFindings] = useState({ items: [], total: 0, page: 0, size: PAGE_SIZE });
   const [severity, setSeverity] = useState('');
   const [ruleId, setRuleId] = useState('');
@@ -43,6 +43,7 @@ export default function ReviewDetail({ review, rules, onRefresh, onBack }) {
       <div className="meta-grid"><div><b>Rule set</b><span>{review.ruleSetName}</span></div><div><b>Scanned files</b><span>{review.scannedFiles}</span></div><div><b>Skipped files</b><span>{review.skippedFiles}</span></div>{review.commitSha && <div><b>Commit</b><code title={review.commitSha}>{review.commitSha.slice(0, 12)}</code></div>}</div>
       {review.warning && <div className="notice warning">{review.warning}</div>}{review.error && <div className="notice error">{review.error}</div>}
       {REVIEW_STATUSES.includes(review.status) && <div className="inline"><span className="muted">Review in progress…</span><button type="button" onClick={cancel}>Cancel</button></div>}
+      {!REVIEW_STATUSES.includes(review.status) && <button type="button" className="danger" onClick={() => onDelete(review)}>Delete review</button>}
       <div className="summary">{SEVERITIES.map(item => <span key={item} className={`severity ${item.toLowerCase()}`}>{item}: {review.summary?.[item] || 0}</span>)}</div>
     </section>
     <section className="card">

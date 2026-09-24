@@ -15,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
@@ -462,6 +463,25 @@ public class ReviewService {
         r.status = "CANCELLED";
         r.updatedAt = Instant.now();
         return view(reviews.save(r));
+    }
+
+    /**
+     * Deletes a terminal review and all findings and feedback stored with it.
+     *
+     * @param owner authenticated application user ID
+     * @param id review identifier
+     * @throws ResponseStatusException when the review is missing, foreign, or still running
+     */
+    @Transactional
+    public void delete(String owner, String id) {
+        ReviewEntity review = owned(owner, id);
+        if (Set.of("QUEUED", "RUNNING").contains(review.status)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Cancel the review before deleting it");
+        }
+
+        findings.deleteByReviewId(review.id);
+        reviews.delete(review);
     }
 
     /**

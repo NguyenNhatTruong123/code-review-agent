@@ -42,6 +42,8 @@ textarea { resize: vertical; }
 .ref-help, .ref-name { overflow-wrap: anywhere; }
 .primary { color: #fff; background: #2563eb; border-color: #2563eb; font-weight: 600; width: max-content; }
 .primary:hover:not(:disabled) { color: #fff; background: #1d4ed8; border-color: #1d4ed8; }
+.danger { color: #b91c1c; border-color: #fecaca; background: #fff; }
+.danger:hover:not(:disabled) { color: #991b1b; border-color: #fca5a5; background: #fef2f2; }
 .segmented { display: flex; gap: 4px; border-radius: 9px; padding: 4px; background: #e9eef5; width: max-content; max-width: 100%; margin-bottom: 24px; }
 .segmented button { border: 0; background: transparent; }
 .segmented button.selected { color: #1d4ed8; background: #fff; box-shadow: 0 1px 4px #cbd5e1; font-weight: 600; }
@@ -69,8 +71,12 @@ textarea { resize: vertical; }
 .finding-foot { display: flex; align-items: end; justify-content: space-between; gap: 12px; font-size: .82rem; }
 .finding-foot label { min-width: 170px; }
 .list-row, .review-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 1px solid #e2e8f0; padding: 15px 0; }
-.list-row > div:first-child, .review-row > div:first-child { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
-.review-row { width: 100%; text-align: left; border-left: 0; border-right: 0; border-bottom: 0; border-radius: 0; }
+.list-row > div:first-child, .review-open > div:first-child { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.review-row { width: 100%; }
+.review-open { display: flex; flex: 1; min-width: 0; align-items: center; justify-content: space-between; gap: 16px; border: 0; border-radius: 0; background: transparent; color: inherit; padding: 0; text-align: left; }
+.review-open:hover { background: transparent; }
+.review-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.review-action-note { font-size: .82rem; text-align: right; }
 .review-row:hover { background: #f8fafc; }
 .empty { color: #64748b; padding: 24px 0; }
 .back-button { width: max-content; }

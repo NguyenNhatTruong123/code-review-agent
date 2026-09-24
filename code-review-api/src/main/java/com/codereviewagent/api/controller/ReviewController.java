@@ -120,6 +120,20 @@ public class ReviewController {
     }
 
     /**
+     * Deletes an owner-scoped terminal review and its stored findings and feedback.
+     *
+     * @param p authenticated principal
+     * @param id review identifier
+     * @throws ResponseStatusException with 404 for a missing or foreign review, or 409 while it
+     *     is queued or running
+     */
+    @DeleteMapping("/reviews/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(Principal p, @PathVariable String id) {
+        reviews.delete(current.id(p), id);
+    }
+
+    /**
      * Lists filtered findings for an owner-scoped review.
      *
      * @param p authenticated principal
