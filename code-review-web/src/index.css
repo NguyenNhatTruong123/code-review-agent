@@ -37,6 +37,9 @@ textarea { resize: vertical; }
 .inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .optional, .muted, .hint { color: #64748b; font-weight: 400; }
 .hint { margin: 0; font-size: .88rem; }
+.ref-field { display: grid; gap: 6px; min-width: 0; }
+.ref-select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+.ref-help, .ref-name { overflow-wrap: anywhere; }
 .primary { color: #fff; background: #2563eb; border-color: #2563eb; font-weight: 600; width: max-content; }
 .primary:hover:not(:disabled) { color: #fff; background: #1d4ed8; border-color: #1d4ed8; }
 .segmented { display: flex; gap: 4px; border-radius: 9px; padding: 4px; background: #e9eef5; width: max-content; max-width: 100%; margin-bottom: 24px; }
