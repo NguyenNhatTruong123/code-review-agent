@@ -107,7 +107,7 @@ export default function ReviewForm({ sets, onCreated }) {
         </div>
       </> : <>
         <label>Code<textarea className="code-input" value={code} onChange={e => setCode(e.target.value)} required maxLength={100000} rows={12} placeholder="Paste source code here" /></label>
-        <div className="grid-two"><label>File name <span className="optional">(optional)</span><input value={fileName} onChange={e => setFileName(e.target.value)} placeholder="Example.java" /></label>
+        <div className="grid-two"><label><span>File name <span className="optional">(optional)</span></span><input value={fileName} onChange={e => setFileName(e.target.value)} placeholder="Example.java" /></label>
           <label>Language<select value={language} onChange={e => setLanguage(e.target.value)}><option value="">Detect from file name</option>{SOURCE_LANGUAGES.map(item => <option key={item}>{item}</option>)}</select></label></div>
       </>}
       <label>Rule set<select value={ruleSetId} onChange={e => setRuleSetId(e.target.value)} required><option value="">Select a rule set</option>{enabledSets.map(set => <option key={set.id} value={set.id}>{set.name}</option>)}</select></label>
