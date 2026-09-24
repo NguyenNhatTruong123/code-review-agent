@@ -39,9 +39,15 @@ public class ReviewService {
      *
      * @param repositoryUrl public repository URL
      * @param ref requested branch or commit; blank selects the default branch
-     * @param ruleSetId owner-scoped rule-set identifier
+     * @param ruleSetId owner-scoped rule-set identifier when using a rule set
+     * @param ruleIds owner-scoped rule identifiers when selecting individual rules
      */
-    public record RepositoryInput(String repositoryUrl, String ref, String ruleSetId) {}
+    public record RepositoryInput(
+            String repositoryUrl, String ref, String ruleSetId, List<String> ruleIds) {
+        public RepositoryInput(String repositoryUrl, String ref, String ruleSetId) {
+            this(repositoryUrl, ref, ruleSetId, null);
+        }
+    }
 
     /**
      * Input contract for a review of one pasted source file.
@@ -49,17 +55,29 @@ public class ReviewService {
      * @param code source text
      * @param fileName logical source filename
      * @param language explicit language or blank for filename detection
-     * @param ruleSetId owner-scoped rule-set identifier
+     * @param ruleSetId owner-scoped rule-set identifier when using a rule set
+     * @param ruleIds owner-scoped rule identifiers when selecting individual rules
      */
-    public record PasteInput(String code, String fileName, String language, String ruleSetId) {}
+    public record PasteInput(
+            String code, String fileName, String language, String ruleSetId, List<String> ruleIds) {
+        public PasteInput(String code, String fileName, String language, String ruleSetId) {
+            this(code, fileName, language, ruleSetId, null);
+        }
+    }
 
     /**
-     * Selects whether a rerun uses its stored rule snapshot or an enabled current rule set.
+     * Selects whether a rerun uses its stored rule snapshot, an enabled current rule set, or
+     * directly selected current rules.
      *
-     * @param ruleMode {@code ORIGINAL} or {@code CURRENT}
+     * @param ruleMode {@code ORIGINAL}, {@code CURRENT}, or {@code CURRENT_RULES}
      * @param ruleSetId required only when {@code ruleMode} is {@code CURRENT}
+     * @param ruleIds required only when {@code ruleMode} is {@code CURRENT_RULES}
      */
-    public record RerunInput(String ruleMode, String ruleSetId) {}
+    public record RerunInput(String ruleMode, String ruleSetId, List<String> ruleIds) {
+        public RerunInput(String ruleMode, String ruleSetId) {
+            this(ruleMode, ruleSetId, null);
+        }
+    }
 
     /**
      * Public review status view returned by the API.
@@ -160,7 +178,10 @@ public class ReviewService {
     public record ReviewPage(List<ReviewView> items, long total, int page, int size) {}
 
     private static final Set<String> FEEDBACK = Set.of("HELPFUL", "IRRELEVANT", "FALSE_POSITIVE");
-    private static final Set<String> RERUN_RULE_MODES = Set.of("ORIGINAL", "CURRENT");
+    private static final Set<String> RERUN_RULE_MODES =
+            Set.of("ORIGINAL", "CURRENT", "CURRENT_RULES");
+    private static final String DIRECT_RULES_ID = "DIRECT_RULES";
+    private static final String DIRECT_RULES_NAME = "Selected rules";
     private static final Set<String> LANGUAGES =
             Set.of(
                     "JAVA",
@@ -187,7 +208,7 @@ public class ReviewService {
     private final ReviewWorker worker;
     private final int maxPasteChars;
 
-    private record RerunRules(String ruleSetId, String ruleSetName, String snapshotJson) {}
+    private record SelectedRules(String ruleSetId, String ruleSetName, String snapshotJson) {}
 
     /**
      * Creates the review use-case service and its external collaborators.
@@ -237,9 +258,11 @@ public class ReviewService {
         // The hash binds an idempotency key to the complete logical request, not just its key
         // string.
         key = key == null || key.isBlank() ? null : key;
-        if (input == null || input.ruleSetId() == null) {
-            throw invalid("Rule set is required");
+        if (input == null) {
+            throw invalid("Review input is required");
         }
+
+        SelectedRules selectedRules = selectRules(owner, input.ruleSetId(), input.ruleIds());
 
         Repo repo = github.parse(input.repositoryUrl());
         RepoInfo info = github.inspect(repo);
@@ -247,23 +270,27 @@ public class ReviewService {
                 input.ref() == null || input.ref().isBlank()
                         ? info.defaultBranch()
                         : input.ref().trim();
-        String hash = sha256(repo.url() + "\n" + ref + "\n" + input.ruleSetId());
+        String hash =
+                sha256(repo.url() + "\n" + ref + "\n" + selectedRules.snapshotJson());
         ReviewEntity existing = previous(owner, key, hash);
         if (existing != null) {
             return view(existing);
         }
 
         ensureCapacity(owner);
-        List<RuleSnapshot> snapshot = rules.snapshot(owner, input.ruleSetId());
         String sha = github.resolveCommit(repo, ref);
 
         ReviewEntity review =
-                new ReviewEntity(UUID.randomUUID().toString(), owner, "GITHUB", input.ruleSetId());
+                new ReviewEntity(
+                        UUID.randomUUID().toString(),
+                        owner,
+                        "GITHUB",
+                        selectedRules.ruleSetId());
         review.repositoryUrl = repo.url();
         review.requestedRef = ref;
         review.commitSha = sha;
-        review.ruleSetName = rules.ownedSet(input.ruleSetId(), owner).name;
-        review.ruleSnapshotJson = rules.write(snapshot);
+        review.ruleSetName = selectedRules.ruleSetName();
+        review.ruleSnapshotJson = selectedRules.snapshotJson();
         review.idempotencyKey = key;
         review.inputHash = hash;
         reviews.save(review);
@@ -290,10 +317,12 @@ public class ReviewService {
         key = key == null || key.isBlank() ? null : key;
         if (input == null
                 || input.code() == null
-                || input.code().isBlank()
-                || input.ruleSetId() == null) {
-            throw invalid("Code and rule set are required");
+                || input.code().isBlank()) {
+            throw invalid("Code is required");
         }
+
+        SelectedRules selectedRules = selectRules(owner, input.ruleSetId(), input.ruleIds());
+
         if (input.code().length() > maxPasteChars) {
             throw new ResponseStatusException(
                     HttpStatus.PAYLOAD_TOO_LARGE, "Pasted code is too large");
@@ -315,22 +344,32 @@ public class ReviewService {
         }
 
         String hash =
-                sha256(input.code() + "\n" + path + "\n" + language + "\n" + input.ruleSetId());
+                sha256(
+                        input.code()
+                                + "\n"
+                                + path
+                                + "\n"
+                                + language
+                                + "\n"
+                                + selectedRules.snapshotJson());
         ReviewEntity existing = previous(owner, key, hash);
         if (existing != null) {
             return view(existing);
         }
 
         ensureCapacity(owner);
-        List<RuleSnapshot> snapshot = rules.snapshot(owner, input.ruleSetId());
 
         ReviewEntity review =
-                new ReviewEntity(UUID.randomUUID().toString(), owner, "PASTE", input.ruleSetId());
+                new ReviewEntity(
+                        UUID.randomUUID().toString(),
+                        owner,
+                        "PASTE",
+                        selectedRules.ruleSetId());
         review.fileName = path;
         review.language = language;
         review.pastedSource = input.code();
-        review.ruleSetName = rules.ownedSet(input.ruleSetId(), owner).name;
-        review.ruleSnapshotJson = rules.write(snapshot);
+        review.ruleSetName = selectedRules.ruleSetName();
+        review.ruleSnapshotJson = selectedRules.snapshotJson();
         review.idempotencyKey = key;
         review.inputHash = hash;
         reviews.save(review);
@@ -355,7 +394,7 @@ public class ReviewService {
      */
     public ReviewView rerun(String owner, String id, RerunInput input) {
         ReviewEntity original = owned(owner, id);
-        RerunRules rerunRules = selectRerunRules(owner, original, input);
+        SelectedRules rerunRules = selectRerunRules(owner, original, input);
 
         if ("GITHUB".equals(original.inputType)) {
             return rerunRepository(owner, original, rerunRules);
@@ -368,7 +407,8 @@ public class ReviewService {
                 HttpStatus.CONFLICT, "Original review source is unavailable");
     }
 
-    private ReviewView rerunRepository(String owner, ReviewEntity original, RerunRules rerunRules) {
+    private ReviewView rerunRepository(
+            String owner, ReviewEntity original, SelectedRules rerunRules) {
         if (original.repositoryUrl == null
                 || original.repositoryUrl.isBlank()
                 || original.commitSha == null
@@ -399,7 +439,7 @@ public class ReviewService {
         return view(rerun);
     }
 
-    private ReviewView rerunPaste(String owner, ReviewEntity original, RerunRules rerunRules) {
+    private ReviewView rerunPaste(String owner, ReviewEntity original, SelectedRules rerunRules) {
         if (original.pastedSource == null
                 || original.pastedSource.isBlank()
                 || original.fileName == null
@@ -424,21 +464,62 @@ public class ReviewService {
         return view(rerun);
     }
 
-    private RerunRules selectRerunRules(String owner, ReviewEntity original, RerunInput input) {
+    /**
+     * Resolves exactly one current rule-selection mode into a stable review snapshot.
+     *
+     * @param owner authenticated application user ID
+     * @param ruleSetId selected enabled rule-set identifier, if any
+     * @param ruleIds selected enabled individual rule identifiers, if any
+     * @return selection metadata and serialized immutable snapshot
+     * @throws ResponseStatusException when both or neither selection modes are supplied
+     */
+    private SelectedRules selectRules(String owner, String ruleSetId, List<String> ruleIds) {
+        boolean hasRuleSet = ruleSetId != null && !ruleSetId.isBlank();
+        boolean hasRules = ruleIds != null && !ruleIds.isEmpty();
+        if (hasRuleSet == hasRules) {
+            throw invalid("Choose one enabled rule set or one or more rules");
+        }
+
+        if (hasRuleSet) {
+            List<RuleSnapshot> snapshot = rules.snapshot(owner, ruleSetId);
+            return new SelectedRules(
+                    ruleSetId, rules.ownedSet(ruleSetId, owner).name, rules.write(snapshot));
+        }
+
+        List<RuleSnapshot> snapshot = rules.snapshotRules(owner, ruleIds);
+        return new SelectedRules(DIRECT_RULES_ID, DIRECT_RULES_NAME, rules.write(snapshot));
+    }
+
+    private SelectedRules selectRerunRules(String owner, ReviewEntity original, RerunInput input) {
         String mode = input == null || input.ruleMode() == null ? null : input.ruleMode().trim();
         if (!RERUN_RULE_MODES.contains(mode)) {
-            throw invalid("Choose original rules or an enabled rule set");
+            throw invalid("Choose original rules, an enabled rule set, or one or more rules");
         }
 
         if ("ORIGINAL".equals(mode)) {
+            if ((input.ruleSetId() != null && !input.ruleSetId().isBlank())
+                    || (input.ruleIds() != null && !input.ruleIds().isEmpty())) {
+                throw invalid("Original reruns cannot include a current rule selection");
+            }
             try {
                 rules.readSnapshot(original.ruleSnapshotJson);
-                return new RerunRules(
+                return new SelectedRules(
                         original.ruleSetId, original.ruleSetName, original.ruleSnapshotJson);
             } catch (IllegalStateException e) {
                 throw new ResponseStatusException(
                         HttpStatus.CONFLICT, "Original rule snapshot is unavailable");
             }
+        }
+
+        if ("CURRENT_RULES".equals(mode)) {
+            if (input.ruleSetId() != null && !input.ruleSetId().isBlank()) {
+                throw invalid("Choose either an enabled rule set or individual rules");
+            }
+            return selectRules(owner, null, input.ruleIds());
+        }
+
+        if (input.ruleIds() != null && !input.ruleIds().isEmpty()) {
+            throw invalid("Choose either an enabled rule set or individual rules");
         }
 
         if (input.ruleSetId() == null || input.ruleSetId().isBlank()) {
@@ -447,10 +528,10 @@ public class ReviewService {
 
         List<RuleSnapshot> snapshot = rules.snapshot(owner, input.ruleSetId());
         String ruleSetName = rules.ownedSet(input.ruleSetId(), owner).name;
-        return new RerunRules(input.ruleSetId(), ruleSetName, rules.write(snapshot));
+        return new SelectedRules(input.ruleSetId(), ruleSetName, rules.write(snapshot));
     }
 
-    private ReviewEntity newRerun(String owner, ReviewEntity original, RerunRules rerunRules) {
+    private ReviewEntity newRerun(String owner, ReviewEntity original, SelectedRules rerunRules) {
         ensureCapacity(owner);
 
         ReviewEntity rerun =

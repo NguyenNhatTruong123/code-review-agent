@@ -40,6 +40,10 @@ textarea { resize: vertical; }
 .required-mark { color: #dc2626; font-weight: 700; }
 .required-note { margin: 0; color: #64748b; font-size: .88rem; font-weight: 400; }
 .hint { margin: 0; font-size: .88rem; }
+.ai-review-status { margin-top: 14px; }
+.finding-source { border-radius: 999px; font-size: .75rem; font-weight: 700; padding: 2px 8px; }
+.finding-source.ai { background: #dbeafe; color: #1d4ed8; }
+.finding-source.static { background: #f1f5f9; color: #475569; }
 .ref-field { display: grid; gap: 6px; min-width: 0; }
 .ref-select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }
 .ref-help, .ref-name { overflow-wrap: anywhere; }
@@ -102,6 +106,7 @@ textarea { resize: vertical; }
 .check input { width: auto; }
 fieldset { border: 1px solid #cbd5e1; border-radius: 8px; display: grid; gap: 10px; padding: 16px; }
 legend { font-weight: 600; }
+.rule-choice-list { display: grid; gap: 8px; max-height: 260px; overflow-y: auto; padding: 4px; }
 .pagination { justify-content: flex-end; }
 .auth-shell { min-height: 100vh; display: flex; align-items: center; flex-direction: column; justify-content: center; padding: 30px; text-align: center; }
 .auth-shell > p { max-width: 440px; }

@@ -148,6 +148,7 @@ export default function App() {
           {tab === 'new' && (
             <ReviewForm
               sets={sets}
+              rules={rules}
               onCreated={async review => {
                 setSelected(review);
                 setTab('reviews');

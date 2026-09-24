@@ -366,6 +366,45 @@ public class RuleService {
     }
 
     /**
+     * Captures an immutable snapshot of specifically selected enabled rules.
+     *
+     * @param owner authenticated application user ID
+     * @param ruleIds ordered owner-scoped rule identifiers
+     * @return immutable list of selected rule snapshots
+     * @throws ResponseStatusException when no rules are selected, an ID is invalid, or a selected
+     *     rule is disabled or foreign
+     */
+    public List<RuleSnapshot> snapshotRules(String owner, List<String> ruleIds) {
+        if (ruleIds == null
+                || ruleIds.isEmpty()
+                || ruleIds.size() > 100
+                || ruleIds.stream().anyMatch(id -> id == null || id.isBlank())
+                || ruleIds.stream().distinct().count() != ruleIds.size()) {
+            throw invalid("Select one or more unique rules");
+        }
+
+        List<RuleSnapshot> result = new ArrayList<>();
+        for (String id : ruleIds) {
+            RuleEntity rule = ownedRule(id, owner);
+            if (!rule.enabled) {
+                throw invalid("Selected rules must be enabled");
+            }
+            result.add(
+                    new RuleSnapshot(
+                            rule.id,
+                            rule.version,
+                            rule.name,
+                            rule.severity,
+                            rule.languages,
+                            rule.instruction,
+                            rule.matchText,
+                            rule.suggestedFix));
+        }
+
+        return List.copyOf(result);
+    }
+
+    /**
      * Decodes the persisted rule ID list and surfaces corrupt storage as an application error.
      *
      * @param set persisted rule set

@@ -10,6 +10,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -111,8 +112,13 @@ public class AiReviewService {
         String data =
                 mapper.writeValueAsString(
                         Map.of("path", path, "language", language, "rules", rules, "code", code));
-        String content = completionText(requestCompletion(SYSTEM, data));
-        JsonNode findings = mapper.readTree(content).path("findings");
+        String content = completionText(requestCompletion(SYSTEM, data, true));
+        JsonNode review = reviewResponse(content);
+        if (review.isObject() && review.isEmpty()) {
+            return List.of();
+        }
+
+        JsonNode findings = review.path("findings");
         if (!findings.isArray()) {
             throw new IOException("AI provider response has no findings array");
         }
@@ -148,7 +154,8 @@ public class AiReviewService {
         }
 
         String data = mapper.writeValueAsString(Map.of("name", name, "description", description));
-        String instruction = completionText(requestCompletion(INSTRUCTION_SUGGESTION_SYSTEM, data)).trim();
+        String instruction =
+                completionText(requestCompletion(INSTRUCTION_SUGGESTION_SYSTEM, data, false)).trim();
         if (instruction.isBlank()) {
             throw new IOException("AI provider returned an empty instruction");
         }
@@ -170,18 +177,19 @@ public class AiReviewService {
         return model;
     }
 
-    private JsonNode requestCompletion(String system, String data)
+    private JsonNode requestCompletion(String system, String data, boolean structuredResponse)
             throws IOException, InterruptedException {
-        Map<String, Object> payload =
-                Map.of(
-                        "model",
-                        model,
-                        "temperature",
-                        0,
-                        "messages",
-                        List.of(
-                                Map.of("role", "system", "content", system),
-                                Map.of("role", "user", "content", data)));
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", model);
+        payload.put("temperature", 0);
+        payload.put(
+                "messages",
+                List.of(
+                        Map.of("role", "system", "content", system),
+                        Map.of("role", "user", "content", data)));
+        if (structuredResponse) {
+            payload.put("response_format", Map.of("type", "json_object"));
+        }
 
         String requestBody = mapper.writeValueAsString(payload);
         HttpRequest request =
@@ -195,6 +203,9 @@ public class AiReviewService {
                         .build();
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
+            if (structuredResponse && structuredOutputIsUnsupported(response.statusCode(), response.body())) {
+                return requestCompletion(system, data, false);
+            }
             throw new IOException(
                     "AI provider returned HTTP "
                             + response.statusCode()
@@ -202,6 +213,17 @@ public class AiReviewService {
                             + providerErrorDetail(response.body()));
         }
         return mapper.readTree(response.body());
+    }
+
+    private boolean structuredOutputIsUnsupported(int statusCode, String responseBody) {
+        if (statusCode != 400 && statusCode != 404) {
+            return false;
+        }
+
+        String detail = providerErrorDetail(responseBody).toLowerCase(java.util.Locale.ROOT);
+        return detail.contains("response_format")
+                || detail.contains("structured output")
+                || detail.contains("no endpoints found");
     }
 
     private String providerErrorDetail(String responseBody) {
@@ -248,6 +270,31 @@ public class AiReviewService {
             return content;
         }
         return content.substring(firstLineEnd + 1, closingFence).trim();
+    }
+
+    /**
+     * Reads the AI review object while tolerating an accidental prose prefix from a provider.
+     *
+     * @param content provider completion text expected to contain a findings object
+     * @return parsed review response object
+     * @throws IOException when no valid JSON object can be recovered safely
+     */
+    private JsonNode reviewResponse(String content) throws IOException {
+        try {
+            return mapper.readTree(content);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
+            int start = content.indexOf('{');
+            int end = content.lastIndexOf('}');
+            if (start < 0 || end <= start) {
+                throw new IOException("AI provider returned a non-JSON review response");
+            }
+
+            try {
+                return mapper.readTree(content.substring(start, end + 1));
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                throw new IOException("AI provider returned an invalid JSON review response", e);
+            }
+        }
     }
 
     private static URI configuredEndpoint(String baseUrl) {

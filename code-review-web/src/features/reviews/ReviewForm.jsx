@@ -3,7 +3,7 @@ import { api, query } from '../../api.js';
 import ErrorNotice from '../../components/ErrorNotice.jsx';
 import { SOURCE_LANGUAGES } from '../../constants.js';
 
-export default function ReviewForm({ sets, onCreated }) {
+export default function ReviewForm({ sets, rules = [], onCreated }) {
   const [source, setSource] = useState('repository');
   const [repositoryUrl, setRepositoryUrl] = useState('');
   const [refChoice, setRefChoice] = useState('');
@@ -14,10 +14,13 @@ export default function ReviewForm({ sets, onCreated }) {
   const [code, setCode] = useState('');
   const [fileName, setFileName] = useState('');
   const [language, setLanguage] = useState('');
+  const [ruleSelection, setRuleSelection] = useState('set');
   const [ruleSetId, setRuleSetId] = useState('');
+  const [ruleIds, setRuleIds] = useState([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const enabledSets = sets.filter(set => set.enabled);
+  const enabledRules = rules.filter(rule => rule.enabled);
   const branches = [...new Set(repoInfo?.branches ?? [])].filter(
     branch => branch && branch !== repoInfo?.defaultBranch
   );
@@ -63,15 +66,17 @@ export default function ReviewForm({ sets, onCreated }) {
 
     try {
       const ref = refChoice === 'manual' ? manualRef.trim() : selectedBranch || '';
+      const selectedRules =
+        ruleSelection === 'set' ? { ruleSetId, ruleIds: null } : { ruleSetId: null, ruleIds };
       const result =
         source === 'repository'
           ? await api('/reviews/repository', {
               method: 'POST',
-              body: { repositoryUrl, ref, ruleSetId },
+              body: { repositoryUrl, ref, ...selectedRules },
             })
           : await api('/reviews/paste', {
               method: 'POST',
-              body: { code, fileName, language, ruleSetId },
+              body: { code, fileName, language, ...selectedRules },
             });
       onCreated(result);
     } catch (e) {
@@ -270,30 +275,97 @@ export default function ReviewForm({ sets, onCreated }) {
             </div>
           </>
         )}
-        <label>
-          <span>
-            Rule set{' '}
+        <fieldset aria-required="true" aria-describedby="review-rule-selection-help">
+          <legend>
+            Rules to review{' '}
             <span className="required-mark" aria-hidden="true">
               *
             </span>
-          </span>
-          <select value={ruleSetId} onChange={e => setRuleSetId(e.target.value)} required>
-            <option value="">Select a rule set</option>
-            {enabledSets.map(set => (
-              <option key={set.id} value={set.id}>
-                {set.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {enabledSets.length === 0 && (
-          <p className="muted">Create and enable a rule set before starting a review.</p>
-        )}
+          </legend>
+          <p id="review-rule-selection-help" className="hint">
+            Choose one enabled rule set or select one or more enabled rules.
+          </p>
+          <label className="check">
+            <input
+              type="radio"
+              name="review-rule-selection"
+              value="set"
+              checked={ruleSelection === 'set'}
+              onChange={() => setRuleSelection('set')}
+            />
+            Use an enabled rule set
+          </label>
+          {ruleSelection === 'set' && (
+            <label>
+              Rule set
+              <select
+                value={ruleSetId}
+                onChange={e => setRuleSetId(e.target.value)}
+                required
+              >
+                <option value="">Select a rule set</option>
+                {enabledSets.map(set => (
+                  <option key={set.id} value={set.id}>
+                    {set.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {ruleSelection === 'set' && enabledSets.length === 0 && (
+            <p className="muted">Create and enable a rule set before starting a review.</p>
+          )}
+          <label className="check">
+            <input
+              type="radio"
+              name="review-rule-selection"
+              value="rules"
+              checked={ruleSelection === 'rules'}
+              onChange={() => setRuleSelection('rules')}
+            />
+            Choose individual rules
+          </label>
+          {ruleSelection === 'rules' && (
+            <div className="rule-choice-list" aria-label="Enabled rules">
+              {enabledRules.map(rule => (
+                <label className="check" key={rule.id}>
+                  <input
+                    type="checkbox"
+                    checked={ruleIds.includes(rule.id)}
+                    onChange={e =>
+                      setRuleIds(current =>
+                        e.target.checked
+                          ? [...current, rule.id]
+                          : current.filter(id => id !== rule.id)
+                      )
+                    }
+                  />
+                  <span>
+                    {rule.name}{' '}
+                    <span className="muted">
+                      ({rule.severity} · {rule.languages})
+                    </span>
+                  </span>
+                </label>
+              ))}
+              {enabledRules.length === 0 && (
+                <p className="muted">Create and enable a rule before starting a review.</p>
+              )}
+            </div>
+          )}
+        </fieldset>
         <p className="hint">
           Code is processed by the server. Rules without a literal match use the configured AI
           provider.
         </p>
-        <button className="primary" disabled={busy || inspecting || !ruleSetId}>
+        <button
+          className="primary"
+          disabled={
+            busy ||
+            inspecting ||
+            (ruleSelection === 'set' ? !ruleSetId : ruleIds.length === 0)
+          }
+        >
           {busy ? 'Submitting…' : 'Start review'}
         </button>
       </form>

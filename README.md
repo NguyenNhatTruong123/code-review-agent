@@ -81,6 +81,8 @@ The client can send an optional `Idempotency-Key` header when creating a review 
 
 Review creation requests must provide exactly one rule selection: `ruleSetId` for an enabled rule set, or `ruleIds` containing one or more enabled rules owned by the authenticated user. The selected rules are stored as the review snapshot; the API rejects rules owned by another user or disabled rules.
 
+When rerunning a review, users can reuse the original snapshot, choose an enabled current rule set, or select enabled individual rules. Each rerun stores its own immutable snapshot.
+
 ## Tests and Coverage
 
 The repository includes unit tests for rule matching, repository archive filtering, rule snapshots, review orchestration, and API ownership behavior. JaCoCo creates coverage reports at `code-review-ai/target/site/jacoco/index.html` and `code-review-api/target/site/jacoco/index.html` when Maven verification is run:

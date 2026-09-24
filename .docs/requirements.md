@@ -94,4 +94,8 @@ Review details must refresh findings while a review is running so users can see 
 
 
 ### 16. Rule selection for reviews
-When creating a review, users must be able to select exactly one enabled rule set or choose one or more enabled rules directly from their own rule list. The selected rules must be captured as an immutable review snapshot, and ownership, enabled status, duplicate IDs, and empty selections must be validated by the API.
+When creating or rerunning a review, users must be able to select exactly one enabled rule set or choose one or more enabled rules directly from their own rule list. Reruns must also retain the option to use the original immutable snapshot. The selected rules must be captured as an immutable review snapshot, and ownership, enabled status, duplicate IDs, and empty selections must be validated by the API.
+
+
+### 17. Structured AI review responses
+AI review requests must request a JSON object containing the findings schema. An empty JSON object may represent a completed review with no findings. Provider responses with incidental prose around a valid JSON object may be recovered safely; responses containing data but without a valid findings object must produce an actionable review warning without exposing parser details, source code, prompts, or credentials.

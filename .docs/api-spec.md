@@ -59,6 +59,7 @@ Tài liệu này quy định các yêu cầu cần tuân theo khi thiết kế, 
 - Tạo review repository phải lưu input URL đã chuẩn hóa, ref được yêu cầu, commit SHA thực tế, snapshot của một rule set hoặc các rule được chọn trực tiếp, owner, trạng thái và thời điểm tạo.
 - Tạo review paste phải lưu metadata cần thiết, snapshot của một rule set hoặc các rule được chọn trực tiếp, và owner. Hạn chế lưu raw code theo retention policy.
 - Request tạo review phải có chính xác một trong hai lựa chọn: `ruleSetId` của rule set enabled thuộc owner, hoặc `ruleIds` gồm một hay nhiều rule enabled thuộc owner. Backend phải từ chối khi cả hai hoặc không lựa chọn nào được gửi.
+- Request rerun phải chọn snapshot gốc, một rule set enabled hiện tại, hoặc một hay nhiều rule enabled hiện tại thuộc owner. Lựa chọn hiện tại phải tạo snapshot mới cho rerun.
 - Review tạo xong trả ID và trạng thái ban đầu; client lấy tiến độ/kết quả qua endpoint đọc review.
 - Findings phải có rule ID/version thuộc snapshot review, severity hợp lệ, evidence, explanation và suggested fix. `filePath`, `lineStart`, `lineEnd` có thể rỗng nếu không xác định chắc chắn.
 - API không chấp nhận finding do client tự gửi để trở thành kết quả chính thức.

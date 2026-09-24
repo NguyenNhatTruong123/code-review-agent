@@ -21,9 +21,11 @@ export default function ReviewDetail({
   const [rerunOpen, setRerunOpen] = useState(false);
   const [rerunMode, setRerunMode] = useState('ORIGINAL');
   const [rerunRuleSetId, setRerunRuleSetId] = useState('');
+  const [rerunRuleIds, setRerunRuleIds] = useState([]);
   const [rerunError, setRerunError] = useState('');
   const [rerunning, setRerunning] = useState(false);
   const enabledSets = sets.filter(set => set.enabled);
+  const enabledRules = rules.filter(rule => rule.enabled);
 
   const load = useCallback(async () => {
     // Filters are part of the request identity, so changing one resets the server query via page state.
@@ -40,12 +42,13 @@ export default function ReviewDetail({
 
   useEffect(() => {
     load();
-  }, [load, review.status]);
+  }, [load, review.status, review.updatedAt]);
 
   useEffect(() => {
     setRerunOpen(false);
     setRerunMode('ORIGINAL');
     setRerunRuleSetId('');
+    setRerunRuleIds([]);
     setRerunError('');
   }, [review.id]);
 
@@ -85,7 +88,11 @@ export default function ReviewDetail({
     try {
       const nextReview = await api(`/reviews/${review.id}/rerun`, {
         method: 'POST',
-        body: { ruleMode: rerunMode, ruleSetId: rerunMode === 'CURRENT' ? rerunRuleSetId : null },
+        body: {
+          ruleMode: rerunMode,
+          ruleSetId: rerunMode === 'CURRENT' ? rerunRuleSetId : null,
+          ruleIds: rerunMode === 'CURRENT_RULES' ? rerunRuleIds : null,
+        },
       });
       await onRerun(nextReview);
     } catch (e) {
@@ -112,7 +119,7 @@ export default function ReviewDetail({
         </div>
         <div className="meta-grid">
           <div>
-            <b>Rule set</b>
+            <b>Rule selection</b>
             <span>{review.ruleSetName}</span>
           </div>
           <div>
@@ -134,6 +141,14 @@ export default function ReviewDetail({
             </div>
           )}
         </div>
+        {review.aiEvaluatedFiles > 0 && (
+          <p className="hint ai-review-status">
+            AI completed a provider response for the files counted above. Findings returned by AI
+            are labeled <b>AI finding</b> below; literal text matches are labeled{' '}
+            <b>Literal match</b>. A successful AI response without an AI finding found no
+            supported violation for that file.
+          </p>
+        )}
         {review.warning && <div className="notice warning">{review.warning}</div>}
         {review.error && <div className="notice error">{review.error}</div>}
         {REVIEW_STATUSES.includes(review.status) && (
@@ -187,7 +202,7 @@ export default function ReviewDetail({
             </div>
             <ErrorNotice message={rerunError} clear={() => setRerunError('')} />
             <form className="form-stack" onSubmit={rerun}>
-              {rerunMode === 'CURRENT' && (
+              {rerunMode !== 'ORIGINAL' && (
                 <p className="required-note">
                   <span className="required-mark" aria-hidden="true">
                     *
@@ -248,11 +263,55 @@ export default function ReviewDetail({
                     No enabled rule sets are available. Create or enable a rule set first.
                   </p>
                 )}
+                <label className="check">
+                  <input
+                    type="radio"
+                    name="rerun-rules"
+                    value="CURRENT_RULES"
+                    checked={rerunMode === 'CURRENT_RULES'}
+                    onChange={() => setRerunMode('CURRENT_RULES')}
+                  />{' '}
+                  Choose individual enabled rules
+                </label>
+                {rerunMode === 'CURRENT_RULES' && (
+                  <div className="rule-choice-list" aria-label="Enabled rules">
+                    {enabledRules.map(rule => (
+                      <label className="check" key={rule.id}>
+                        <input
+                          type="checkbox"
+                          checked={rerunRuleIds.includes(rule.id)}
+                          onChange={e =>
+                            setRerunRuleIds(current =>
+                              e.target.checked
+                                ? [...current, rule.id]
+                                : current.filter(id => id !== rule.id)
+                            )
+                          }
+                        />{' '}
+                        <span>
+                          {rule.name}{' '}
+                          <span className="muted">
+                            ({rule.severity} · {rule.languages})
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                    {enabledRules.length === 0 && (
+                      <p className="muted">
+                        No enabled rules are available. Create or enable a rule first.
+                      </p>
+                    )}
+                  </div>
+                )}
               </fieldset>
               <div className="inline">
                 <button
                   className="primary"
-                  disabled={rerunning || (rerunMode === 'CURRENT' && !rerunRuleSetId)}
+                  disabled={
+                    rerunning ||
+                    (rerunMode === 'CURRENT' && !rerunRuleSetId) ||
+                    (rerunMode === 'CURRENT_RULES' && rerunRuleIds.length === 0)
+                  }
                 >
                   {rerunning ? 'Starting rerun…' : 'Start rerun'}
                 </button>
@@ -334,7 +393,9 @@ export default function ReviewDetail({
                   {finding.severity}
                 </span>
                 <h3>{finding.title}</h3>
-                <span className="muted">{finding.source}</span>
+                <span className={`finding-source ${finding.source.toLowerCase()}`}>
+                  {finding.source === 'AI' ? 'AI finding' : 'Literal match'}
+                </span>
               </div>
               <p className="location">
                 {review.commitSha && finding.lineStart ? (
