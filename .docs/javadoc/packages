@@ -1,0 +1,7 @@
+com.codereviewagent.ai.service
+com.codereviewagent.api
+com.codereviewagent.api.config
+com.codereviewagent.api.controller
+com.codereviewagent.api.model
+com.codereviewagent.api.repository
+com.codereviewagent.api.service
