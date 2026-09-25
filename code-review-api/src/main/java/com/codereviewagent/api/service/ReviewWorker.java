@@ -70,11 +70,21 @@ public class ReviewWorker {
      */
     @Async("reviewExecutor")
     public void repository(String reviewId, GitHubService.Repo repo, String sha) {
+        repository(reviewId, repo, sha, List.of());
+    }
+
+    /** Processes either all supported repository files or an explicit source-file selection. */
+    @Async("reviewExecutor")
+    public void repository(
+            String reviewId, GitHubService.Repo repo, String sha, List<String> selectedPaths) {
         try {
             if (!start(reviewId)) {
                 return;
             }
-            SourceArchive archive = github.archive(repo, sha);
+            SourceArchive archive =
+                    selectedPaths == null || selectedPaths.isEmpty()
+                            ? github.archive(repo, sha)
+                            : github.selectedFiles(repo, sha, selectedPaths);
             ReviewEntity review = reviews.findById(reviewId).orElseThrow();
             review.skippedFiles = archive.skippedFiles();
             review.warning = limit(String.join("; ", archive.warnings()), 2000);

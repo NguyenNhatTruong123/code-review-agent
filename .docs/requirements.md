@@ -99,3 +99,7 @@ When creating or rerunning a review, users must be able to select exactly one en
 
 ### 17. Structured AI review responses
 AI review requests must request a JSON object containing the findings schema. An empty JSON object may represent a completed review with no findings. Provider responses with incidental prose around a valid JSON object may be recovered safely; responses containing data but without a valid findings object must produce an actionable review warning without exposing parser details, source code, prompts, or credentials.
+
+
+### 18. Repository file selection
+Repository reviews must let users choose all supported files or a specific set of supported source files from the selected branch, tag, or commit. The file-selection interface must filter the available paths by file extension, including `.java` and `.js`, without loading source contents merely to populate the list. The API must validate the selected paths against the pinned public repository commit, enforce configured count and source-size limits, and preserve the selected scope for reruns.

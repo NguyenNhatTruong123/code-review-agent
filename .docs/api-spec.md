@@ -59,6 +59,7 @@ Tài liệu này quy định các yêu cầu cần tuân theo khi thiết kế, 
 - Tạo review repository phải lưu input URL đã chuẩn hóa, ref được yêu cầu, commit SHA thực tế, snapshot của một rule set hoặc các rule được chọn trực tiếp, owner, trạng thái và thời điểm tạo.
 - Tạo review paste phải lưu metadata cần thiết, snapshot của một rule set hoặc các rule được chọn trực tiếp, và owner. Hạn chế lưu raw code theo retention policy.
 - Request tạo review phải có chính xác một trong hai lựa chọn: `ruleSetId` của rule set enabled thuộc owner, hoặc `ruleIds` gồm một hay nhiều rule enabled thuộc owner. Backend phải từ chối khi cả hai hoặc không lựa chọn nào được gửi.
+- Request tạo repository review có thể bỏ qua `filePaths` để review mọi source file được hỗ trợ, hoặc gửi danh sách path duy nhất từ endpoint liệt kê file để chỉ review các file đó. Backend phải giới hạn số path, kiểm tra path an toàn, extension được hỗ trợ, và kiểm tra file tại commit đã được pin.
 - Request rerun phải chọn snapshot gốc, một rule set enabled hiện tại, hoặc một hay nhiều rule enabled hiện tại thuộc owner. Lựa chọn hiện tại phải tạo snapshot mới cho rerun.
 - Review tạo xong trả ID và trạng thái ban đầu; client lấy tiến độ/kết quả qua endpoint đọc review.
 - Findings phải có rule ID/version thuộc snapshot review, severity hợp lệ, evidence, explanation và suggested fix. `filePath`, `lineStart`, `lineEnd` có thể rỗng nếu không xác định chắc chắn.
@@ -84,6 +85,17 @@ Tài liệu này quy định các yêu cầu cần tuân theo khi thiết kế, 
 - Không trả dữ liệu nội bộ thừa; chỉ đưa ra field cần thiết cho chức năng gọi API.
 
 ## 9. Rule instruction suggestion API
+
+## 9.1 Repository source-file listing API
+
+### `GET /api/v1/github/source-files?url={repositoryUrl}&ref={ref}`
+
+- Yêu cầu người dùng đã xác thực. `url` là GitHub repository URL public hợp lệ; `ref` là optional và mặc định là default branch.
+- Response `200 OK` là danh sách object `{ "path": "src/App.java", "language": "JAVA" }` chỉ bao gồm source file được hỗ trợ và không thuộc thư mục bị loại trừ.
+- Endpoint chỉ lấy metadata từ GitHub tree API, không tải source content.
+- Trả `400` khi repository, ref, hoặc file tree không hợp lệ/quá lớn; `503` khi GitHub rate limit; và `502` khi GitHub không phản hồi hợp lệ.
+
+## 10. Rule instruction suggestion API
 
 ### `POST /api/v1/rules/instruction-suggestions`
 
