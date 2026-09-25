@@ -73,7 +73,7 @@ npm run dev
 
 Open `http://localhost:8000`. Register an account with a password of at least 12 characters, then sign in. The frontend uses the Vite proxy to reach the API at `http://localhost:8080`.
 
-To review a public repository, enter a URL such as `https://github.com/owner/repo`, optionally select a branch or commit, then choose either one enabled rule set or one or more enabled individual rules. The API records an immutable snapshot of the selected rules before downloading the archive, so later edits do not alter that review. Reviews run in the background and show findings as files complete. For pasted code, select the language explicitly or use a recognized file extension.
+To review a public repository, enter a URL such as `https://github.com/owner/repo`, optionally select a branch or commit, then choose either one enabled rule set or one or more enabled individual rules. Choose **Review all supported files** to keep the current repository-wide behavior. Choose **Choose specific files** to load source-file metadata for the selected ref, filter it by extension such as `.java` or `.js`, and select only the paths to review. This listing does not download source contents; when a selected-file review starts, the backend loads only the selected files from the pinned commit. The selected paths and rules are stored with the review so a rerun uses the same source scope. Reviews run in the background and show findings as files complete. For pasted code, select the language explicitly or use a recognized file extension.
 
 ## API Overview
 
@@ -83,6 +83,7 @@ All application endpoints except registration, login, CSRF initialization, and h
 |---|---|
 | `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me` | Account and session. |
 | `GET /api/v1/github/inspect?url=...` | Validate a public repository and list up to 100 branch names. |
+| `GET /api/v1/github/source-files?url=...&ref=...` | List reviewable source-file paths and languages for a ref without loading their contents. |
 | `POST /api/v1/reviews/repository`, `POST /api/v1/reviews/paste` | Start a review; return `202` and a review ID. |
 | `GET /api/v1/reviews?page=0&size=50`, `GET /api/v1/reviews/{id}` | Paginated history and review details. |
 | `GET /api/v1/reviews/{id}/findings` | Paginated findings with severity, rule, and file filters. |
@@ -92,7 +93,7 @@ All application endpoints except registration, login, CSRF initialization, and h
 
 The client can send an optional `Idempotency-Key` header when creating a review to prevent duplicate submissions. A key reused with different input returns a conflict.
 
-Review creation requests must provide exactly one rule selection: `ruleSetId` for an enabled rule set, or `ruleIds` containing one or more enabled rules owned by the authenticated user. The selected rules are stored as the review snapshot; the API rejects rules owned by another user or disabled rules.
+Review creation requests must provide exactly one rule selection: `ruleSetId` for an enabled rule set, or `ruleIds` containing one or more enabled rules owned by the authenticated user. A repository request may omit `filePaths` to review all supported files, or provide a unique list of up to 300 paths returned by `GET /github/source-files` to review only those files. The selected rules and file paths are stored as the review snapshot; the API rejects rules owned by another user or disabled rules.
 
 When rerunning a review, users can reuse the original snapshot, choose an enabled current rule set, or select enabled individual rules. Each rerun stores its own immutable snapshot.
 
