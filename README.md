@@ -119,3 +119,15 @@ These commands are provided for local verification. They were not run as part of
 ## Current Scope
 
 The application accepts public `github.com` repositories and a defined set of text source file extensions. It does not review private repositories, pull requests, dependencies, or runtime behavior, and it never executes downloaded code. Processing limits and GitHub API rate limits can prevent very large repositories from being reviewed with default settings.
+
+## GitHub Development Workflow
+
+The repository includes GitHub configuration under `.github/`:
+
+- Pull requests run backend Maven tests, frontend formatting checks, frontend tests, and the production build.
+- Java API documentation can be generated and downloaded as a workflow artifact.
+- CodeQL and dependency review workflows provide security checks.
+- Version tags matching `v*.*.*` produce backend, frontend, and Javadoc build artifacts.
+- Bug reports, feature requests, pull requests, and dependency updates use repository templates and automation.
+
+Workflows do not contain application credentials. Configure runtime secrets such as `OPENROUTER_API_KEY` and `GITHUB_TOKEN` only in the deployment environment when a workflow genuinely needs them.
