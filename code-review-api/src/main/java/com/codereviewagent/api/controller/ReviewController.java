@@ -2,6 +2,7 @@ package com.codereviewagent.api.controller;
 
 import com.codereviewagent.api.service.CurrentUser;
 import com.codereviewagent.api.service.GitHubService.RepoInfo;
+import com.codereviewagent.api.service.GitHubService.SourceFileInfo;
 import com.codereviewagent.api.service.ReviewService;
 import com.codereviewagent.api.service.ReviewService.FindingPage;
 import com.codereviewagent.api.service.ReviewService.FindingView;
@@ -47,11 +48,18 @@ public class ReviewController {
         return reviews.inspect(url);
     }
 
+    /** Lists reviewable source-file metadata for a repository ref before review submission. */
+    @GetMapping("/github/source-files")
+    public List<SourceFileInfo> sourceFiles(
+            @RequestParam String url, @RequestParam(required = false) String ref) {
+        return reviews.sourceFiles(url, ref);
+    }
+
     /**
      * Queues a repository review and returns its initial view with HTTP 202.
      *
      * @param p authenticated principal
-     * @param body repository URL, ref, and rule-set selection
+     * @param body repository URL, ref, rules, and optional source-file selection
      * @param key optional idempotency key for retry-safe submission
      * @return queued review view
      */

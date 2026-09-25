@@ -106,7 +106,8 @@ textarea { resize: vertical; }
 .check input { width: auto; }
 fieldset { border: 1px solid #cbd5e1; border-radius: 8px; display: grid; gap: 10px; padding: 16px; }
 legend { font-weight: 600; }
-.rule-choice-list { display: grid; gap: 8px; max-height: 260px; overflow-y: auto; padding: 4px; }
+.rule-choice-list, .file-choice-list { display: grid; gap: 8px; max-height: 260px; overflow-y: auto; padding: 4px; }
+.file-selection-panel { display: grid; gap: 12px; }
 .pagination { justify-content: flex-end; }
 .auth-shell { min-height: 100vh; display: flex; align-items: center; flex-direction: column; justify-content: center; padding: 30px; text-align: center; }
 .auth-shell > p { max-width: 440px; }

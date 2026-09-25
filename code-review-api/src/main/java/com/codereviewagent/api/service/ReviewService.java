@@ -6,8 +6,13 @@ import com.codereviewagent.api.repository.FindingRepository;
 import com.codereviewagent.api.repository.ReviewRepository;
 import com.codereviewagent.api.service.GitHubService.Repo;
 import com.codereviewagent.api.service.GitHubService.RepoInfo;
+import com.codereviewagent.api.service.GitHubService.SourceFileInfo;
 import com.codereviewagent.api.service.RuleService.RuleSnapshot;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -41,11 +46,20 @@ public class ReviewService {
      * @param ref requested branch or commit; blank selects the default branch
      * @param ruleSetId owner-scoped rule-set identifier when using a rule set
      * @param ruleIds owner-scoped rule identifiers when selecting individual rules
+     * @param filePaths optional unique repository-relative source paths; absent selects all files
      */
     public record RepositoryInput(
-            String repositoryUrl, String ref, String ruleSetId, List<String> ruleIds) {
+            String repositoryUrl,
+            String ref,
+            String ruleSetId,
+            List<String> ruleIds,
+            List<String> filePaths) {
+        public RepositoryInput(String repositoryUrl, String ref, String ruleSetId, List<String> ruleIds) {
+            this(repositoryUrl, ref, ruleSetId, ruleIds, null);
+        }
+
         public RepositoryInput(String repositoryUrl, String ref, String ruleSetId) {
-            this(repositoryUrl, ref, ruleSetId, null);
+            this(repositoryUrl, ref, ruleSetId, null, null);
         }
     }
 
@@ -206,6 +220,7 @@ public class ReviewService {
     private final RuleService rules;
     private final GitHubService github;
     private final ReviewWorker worker;
+    private final ObjectMapper mapper;
     private final int maxPasteChars;
 
     private record SelectedRules(String ruleSetId, String ruleSetName, String snapshotJson) {}
@@ -220,19 +235,32 @@ public class ReviewService {
      * @param worker asynchronous review worker
      * @param maxPasteChars maximum accepted pasted-source length
      */
+    @Autowired
     public ReviewService(
             ReviewRepository reviews,
             FindingRepository findings,
             RuleService rules,
             GitHubService github,
             ReviewWorker worker,
+            ObjectMapper mapper,
             @Value("${app.max-paste-chars}") int maxPasteChars) {
         this.reviews = reviews;
         this.findings = findings;
         this.rules = rules;
         this.github = github;
         this.worker = worker;
+        this.mapper = mapper;
         this.maxPasteChars = maxPasteChars;
+    }
+
+    ReviewService(
+            ReviewRepository reviews,
+            FindingRepository findings,
+            RuleService rules,
+            GitHubService github,
+            ReviewWorker worker,
+            int maxPasteChars) {
+        this(reviews, findings, rules, github, worker, new ObjectMapper(), maxPasteChars);
     }
 
     /**
@@ -243,6 +271,14 @@ public class ReviewService {
      */
     public RepoInfo inspect(String url) {
         return github.inspect(github.parse(url));
+    }
+
+    /** Lists reviewable source file metadata for a repository ref without downloading source code. */
+    public List<SourceFileInfo> sourceFiles(String url, String ref) {
+        Repo repo = github.parse(url);
+        RepoInfo info = github.inspect(repo);
+        String resolvedRef = ref == null || ref.isBlank() ? info.defaultBranch() : ref.trim();
+        return github.listSourceFiles(repo, resolvedRef);
     }
 
     /**
@@ -270,8 +306,16 @@ public class ReviewService {
                 input.ref() == null || input.ref().isBlank()
                         ? info.defaultBranch()
                         : input.ref().trim();
+        List<String> selectedPaths = selectedPaths(input.filePaths());
         String hash =
-                sha256(repo.url() + "\n" + ref + "\n" + selectedRules.snapshotJson());
+                sha256(
+                        repo.url()
+                                + "\n"
+                                + ref
+                                + "\n"
+                                + selectedRules.snapshotJson()
+                                + "\n"
+                                + writePaths(selectedPaths));
         ReviewEntity existing = previous(owner, key, hash);
         if (existing != null) {
             return view(existing);
@@ -291,12 +335,13 @@ public class ReviewService {
         review.commitSha = sha;
         review.ruleSetName = selectedRules.ruleSetName();
         review.ruleSnapshotJson = selectedRules.snapshotJson();
+        review.selectedFilePathsJson = writePaths(selectedPaths);
         review.idempotencyKey = key;
         review.inputHash = hash;
         reviews.save(review);
 
         try {
-            worker.repository(review.id, repo, sha);
+            queueRepository(review.id, repo, sha, selectedPaths);
         } catch (org.springframework.core.task.TaskRejectedException e) {
             markQueueFull(review);
         }
@@ -429,10 +474,12 @@ public class ReviewService {
         rerun.repositoryUrl = original.repositoryUrl;
         rerun.requestedRef = original.requestedRef;
         rerun.commitSha = original.commitSha;
+        rerun.selectedFilePathsJson = original.selectedFilePathsJson;
         reviews.save(rerun);
 
         try {
-            worker.repository(rerun.id, repo, rerun.commitSha);
+            queueRepository(
+                    rerun.id, repo, rerun.commitSha, readPaths(original.selectedFilePathsJson));
         } catch (org.springframework.core.task.TaskRejectedException e) {
             markQueueFull(rerun);
         }
@@ -488,6 +535,48 @@ public class ReviewService {
 
         List<RuleSnapshot> snapshot = rules.snapshotRules(owner, ruleIds);
         return new SelectedRules(DIRECT_RULES_ID, DIRECT_RULES_NAME, rules.write(snapshot));
+    }
+
+    private List<String> selectedPaths(List<String> paths) {
+        if (paths == null || paths.isEmpty()) {
+            return List.of();
+        }
+        if (paths.size() > 300 || paths.stream().anyMatch(path -> path == null || path.isBlank())) {
+            throw invalid("Select between one and 300 source files");
+        }
+        List<String> normalized = paths.stream().map(String::trim).toList();
+        if (new java.util.HashSet<>(normalized).size() != normalized.size()) {
+            throw invalid("Selected source files must be unique");
+        }
+        return normalized;
+    }
+
+    private String writePaths(List<String> paths) {
+        try {
+            return mapper.writeValueAsString(paths);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not store selected source files", e);
+        }
+    }
+
+    private List<String> readPaths(String pathsJson) {
+        if (pathsJson == null || pathsJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            return selectedPaths(mapper.readValue(pathsJson, new TypeReference<List<String>>() {}));
+        } catch (JsonProcessingException | IllegalArgumentException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Original repository file selection is unavailable");
+        }
+    }
+
+    private void queueRepository(String reviewId, Repo repo, String sha, List<String> selectedPaths) {
+        if (selectedPaths.isEmpty()) {
+            worker.repository(reviewId, repo, sha);
+            return;
+        }
+        worker.repository(reviewId, repo, sha, selectedPaths);
     }
 
     private SelectedRules selectRerunRules(String owner, ReviewEntity original, RerunInput input) {

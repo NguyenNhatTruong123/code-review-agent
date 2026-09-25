@@ -10,6 +10,11 @@ export default function ReviewForm({ sets, rules = [], onCreated }) {
   const [manualRef, setManualRef] = useState('');
   const [repoInfo, setRepoInfo] = useState(null);
   const [inspectStatus, setInspectStatus] = useState('idle');
+  const [fileScope, setFileScope] = useState('all');
+  const [sourceFiles, setSourceFiles] = useState([]);
+  const [selectedFilePaths, setSelectedFilePaths] = useState([]);
+  const [fileFilter, setFileFilter] = useState('ALL');
+  const [fileStatus, setFileStatus] = useState('idle');
   const inspectRequest = useRef(0);
   const [code, setCode] = useState('');
   const [fileName, setFileName] = useState('');
@@ -35,7 +40,40 @@ export default function ReviewForm({ sets, rules = [], onCreated }) {
     setRefChoice('');
     setManualRef('');
     setInspectStatus('idle');
+    setSourceFiles([]);
+    setSelectedFilePaths([]);
+    setFileStatus('idle');
     setError('');
+  }
+
+  function changeRef(value) {
+    setRefChoice(value);
+    setSourceFiles([]);
+    setSelectedFilePaths([]);
+    setFileStatus('idle');
+  }
+
+  function changeManualRef(value) {
+    setManualRef(value);
+    setSourceFiles([]);
+    setSelectedFilePaths([]);
+    setFileStatus('idle');
+  }
+
+  async function loadSourceFiles() {
+    setError('');
+    setFileStatus('loading');
+    try {
+      const ref = refChoice === 'manual' ? manualRef.trim() : selectedBranch || '';
+      const result = await api(`/github/source-files?${query({ url: repositoryUrl, ref })}`);
+      setSourceFiles(result);
+      setSelectedFilePaths([]);
+      setFileFilter('ALL');
+      setFileStatus('success');
+    } catch (e) {
+      setError(e.message);
+      setFileStatus('error');
+    }
   }
 
   async function inspect() {
@@ -44,6 +82,9 @@ export default function ReviewForm({ sets, rules = [], onCreated }) {
     setRepoInfo(null);
     setRefChoice(current => (current.startsWith('branch:') ? '' : current));
     setInspectStatus('loading');
+    setSourceFiles([]);
+    setSelectedFilePaths([]);
+    setFileStatus('idle');
 
     try {
       const result = await api(`/github/inspect?${query({ url: repositoryUrl })}`);
@@ -72,7 +113,12 @@ export default function ReviewForm({ sets, rules = [], onCreated }) {
         source === 'repository'
           ? await api('/reviews/repository', {
               method: 'POST',
-              body: { repositoryUrl, ref, ...selectedRules },
+              body: {
+                repositoryUrl,
+                ref,
+                filePaths: fileScope === 'selected' ? selectedFilePaths : null,
+                ...selectedRules,
+              },
             })
           : await api('/reviews/paste', {
               method: 'POST',
@@ -157,7 +203,7 @@ export default function ReviewForm({ sets, rules = [], onCreated }) {
                 id="review-ref"
                 className="ref-select"
                 value={refChoice}
-                onChange={e => setRefChoice(e.target.value)}
+                onChange={e => changeRef(e.target.value)}
                 aria-describedby="review-ref-help"
               >
                 <option value="">
@@ -180,7 +226,7 @@ export default function ReviewForm({ sets, rules = [], onCreated }) {
                   </span>
                   <input
                     value={manualRef}
-                    onChange={e => setManualRef(e.target.value)}
+                    onChange={e => changeManualRef(e.target.value)}
                     maxLength={200}
                     pattern="[A-Za-z0-9._/-]+"
                     title="Use letters, numbers, periods, underscores, hyphens, or slashes"
@@ -213,6 +259,105 @@ export default function ReviewForm({ sets, rules = [], onCreated }) {
                   'Choose a branch above, use the default branch, or enter another ref.'}
               </p>
             </div>
+            <fieldset aria-describedby="review-file-selection-help">
+              <legend>Files to review</legend>
+              <p id="review-file-selection-help" className="hint">
+                Review all supported files, or load a lightweight file list and choose only the
+                files you need. Source code is loaded only after you start the review.
+              </p>
+              <label className="check">
+                <input
+                  type="radio"
+                  name="review-file-scope"
+                  checked={fileScope === 'all'}
+                  onChange={() => setFileScope('all')}
+                />
+                Review all supported files
+              </label>
+              <label className="check">
+                <input
+                  type="radio"
+                  name="review-file-scope"
+                  checked={fileScope === 'selected'}
+                  onChange={() => setFileScope('selected')}
+                />
+                Choose specific files
+              </label>
+              {fileScope === 'selected' && (
+                <div className="file-selection-panel">
+                  <div className="inline">
+                    <button
+                      type="button"
+                      onClick={loadSourceFiles}
+                      disabled={
+                        busy ||
+                        inspecting ||
+                        fileStatus === 'loading' ||
+                        !repositoryUrl ||
+                        (refChoice === 'manual' && !manualRef.trim())
+                      }
+                    >
+                      {fileStatus === 'loading' ? 'Loading files…' : 'Load source files'}
+                    </button>
+                    {fileStatus === 'success' && (
+                      <span className="muted">{sourceFiles.length} supported files available</span>
+                    )}
+                  </div>
+                  {sourceFiles.length > 0 && (
+                    <>
+                      <label>
+                        File type filter
+                        <select value={fileFilter} onChange={e => setFileFilter(e.target.value)}>
+                          <option value="ALL">All supported types</option>
+                          {[
+                            ...new Set(
+                              sourceFiles.map(file =>
+                                file.path.slice(file.path.lastIndexOf('.')).toLowerCase()
+                              )
+                            ),
+                          ]
+                            .sort()
+                            .map(extension => (
+                              <option key={extension} value={extension}>
+                                {extension}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                      <div className="file-choice-list" aria-label="Repository source files">
+                        {sourceFiles
+                          .filter(
+                            file =>
+                              fileFilter === 'ALL' || file.path.toLowerCase().endsWith(fileFilter)
+                          )
+                          .map(file => (
+                            <label className="check" key={file.path}>
+                              <input
+                                type="checkbox"
+                                checked={selectedFilePaths.includes(file.path)}
+                                onChange={e =>
+                                  setSelectedFilePaths(current =>
+                                    e.target.checked
+                                      ? [...current, file.path]
+                                      : current.filter(path => path !== file.path)
+                                  )
+                                }
+                              />
+                              <span>{file.path}</span>
+                            </label>
+                          ))}
+                      </div>
+                      <p className="hint">{selectedFilePaths.length} files selected.</p>
+                    </>
+                  )}
+                  {fileStatus === 'error' && (
+                    <p className="hint">
+                      The file list could not be loaded. Correct the source or ref and retry.
+                    </p>
+                  )}
+                </div>
+              )}
+            </fieldset>
           </>
         ) : (
           <>
@@ -239,7 +384,8 @@ export default function ReviewForm({ sets, rules = [], onCreated }) {
                   File name
                   {!language && (
                     <span className="required-mark" aria-hidden="true">
-                      {' '}*
+                      {' '}
+                      *
                     </span>
                   )}{' '}
                   <span className="optional">(required when no language is selected)</span>
@@ -256,7 +402,8 @@ export default function ReviewForm({ sets, rules = [], onCreated }) {
                   Language
                   {!fileName && (
                     <span className="required-mark" aria-hidden="true">
-                      {' '}*
+                      {' '}
+                      *
                     </span>
                   )}{' '}
                   <span className="optional">(required when no file name is provided)</span>
@@ -298,11 +445,7 @@ export default function ReviewForm({ sets, rules = [], onCreated }) {
           {ruleSelection === 'set' && (
             <label>
               Rule set
-              <select
-                value={ruleSetId}
-                onChange={e => setRuleSetId(e.target.value)}
-                required
-              >
+              <select value={ruleSetId} onChange={e => setRuleSetId(e.target.value)} required>
                 <option value="">Select a rule set</option>
                 {enabledSets.map(set => (
                   <option key={set.id} value={set.id}>
@@ -363,6 +506,9 @@ export default function ReviewForm({ sets, rules = [], onCreated }) {
           disabled={
             busy ||
             inspecting ||
+            (source === 'repository' &&
+              fileScope === 'selected' &&
+              selectedFilePaths.length === 0) ||
             (ruleSelection === 'set' ? !ruleSetId : ruleIds.length === 0)
           }
         >

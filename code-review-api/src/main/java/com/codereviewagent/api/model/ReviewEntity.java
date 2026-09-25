@@ -21,6 +21,7 @@ public class ReviewEntity {
     public String repositoryUrl;
     public String requestedRef;
     public String commitSha;
+    @Lob public String selectedFilePathsJson;
     public String fileName;
     public String language;
 

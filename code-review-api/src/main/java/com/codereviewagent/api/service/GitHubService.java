@@ -24,6 +24,8 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.zip.ZipEntry;
@@ -66,6 +68,9 @@ public class GitHubService {
      * @param code UTF-8 source text
      */
     public record SourceFile(String path, String language, String code) {}
+
+    /** Metadata for a reviewable source file, without loading its source content. */
+    public record SourceFileInfo(String path, String language) {}
 
     /**
      * Archive result including files deliberately skipped by safety or size limits.
@@ -249,6 +254,108 @@ public class GitHubService {
                     HttpStatus.BAD_GATEWAY, "GitHub returned an invalid commit");
         }
         return sha;
+    }
+
+    /**
+     * Lists reviewable source files at a ref through GitHub's tree API. Source contents are not
+     * downloaded until a review is submitted.
+     */
+    public List<SourceFileInfo> listSourceFiles(Repo repo, String ref) {
+        String sha = resolveCommit(repo, ref);
+        JsonNode response =
+                getJson(
+                        "https://api.github.com/repos/"
+                                + repo.owner()
+                                + "/"
+                                + repo.name()
+                                + "/git/trees/"
+                                + sha
+                                + "?recursive=1");
+        if (response.path("truncated").asBoolean(false)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Repository file list is too large to inspect");
+        }
+
+        List<SourceFileInfo> files = new ArrayList<>();
+        for (JsonNode entry : response.path("tree")) {
+            String path = entry.path("path").asText();
+            String language = language(path);
+            if ("blob".equals(entry.path("type").asText())
+                    && safePath(path)
+                    && language != null
+                    && !excluded(path)) {
+                files.add(new SourceFileInfo(path, language));
+            }
+        }
+        if (files.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No supported source files found");
+        }
+        return List.copyOf(files);
+    }
+
+    /** Loads only explicitly selected source files from a pinned commit. */
+    public SourceArchive selectedFiles(Repo repo, String sha, List<String> selectedPaths) {
+        if (!sha.matches("[a-fA-F0-9]{40}")) {
+            throw new IllegalArgumentException("Invalid commit SHA");
+        }
+        LinkedHashSet<String> paths = new LinkedHashSet<>(selectedPaths);
+        if (paths.isEmpty() || paths.size() > maxFiles) {
+            throw new IllegalArgumentException("Invalid selected file count");
+        }
+
+        List<SourceFile> files = new ArrayList<>();
+        long total = 0;
+        for (String path : paths) {
+            String language = language(path);
+            if (!safePath(path) || language == null || excluded(path)) {
+                throw new IllegalArgumentException("Invalid selected source file");
+            }
+            String encodedPath =
+                    String.join(
+                            "/",
+                            java.util.Arrays.stream(path.split("/"))
+                                    .map(segment -> URLEncoder.encode(segment, StandardCharsets.UTF_8))
+                                    .toList());
+            JsonNode item =
+                    getJson(
+                            "https://api.github.com/repos/"
+                                    + repo.owner()
+                                    + "/"
+                                    + repo.name()
+                                    + "/contents/"
+                                    + encodedPath
+                                    + "?ref="
+                                    + sha);
+            if (!"file".equals(item.path("type").asText()) || !item.hasNonNull("content")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selected file is unavailable");
+            }
+            byte[] content;
+            try {
+                content = Base64.getMimeDecoder().decode(item.path("content").asText());
+            } catch (IllegalArgumentException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "GitHub returned invalid source content");
+            }
+            if (content.length == 0 || content.length > maxFileBytes || hasNul(content)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selected file cannot be reviewed");
+            }
+            total += content.length;
+            if (total > maxTotalSourceBytes) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selected files exceed source size limit");
+            }
+            try {
+                String code =
+                        StandardCharsets.UTF_8
+                                .newDecoder()
+                                .onMalformedInput(CodingErrorAction.REPORT)
+                                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                                .decode(ByteBuffer.wrap(content))
+                                .toString();
+                files.add(new SourceFile(path, language, code));
+            } catch (CharacterCodingException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selected file is not UTF-8 text");
+            }
+        }
+        return new SourceArchive(List.copyOf(files), 0, List.of());
     }
 
     /**
