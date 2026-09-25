@@ -126,7 +126,7 @@ The repository includes GitHub configuration under `.github/`:
 
 - Pull requests run backend Maven tests, frontend formatting checks, frontend tests, and the production build.
 - Java API documentation can be generated and downloaded as a workflow artifact.
-- CodeQL and dependency review workflows provide security checks.
+- Dependency review checks pull requests for dependency changes.
 - Version tags matching `v*.*.*` produce backend, frontend, and Javadoc build artifacts.
 - Bug reports, feature requests, pull requests, and dependency updates use repository templates and automation.
 
